@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   CheckCircle2,
@@ -10,16 +10,95 @@ import {
   RefreshCw,
   RotateCcw,
   Swords,
+  Target,
   UserX,
   Users,
 } from 'lucide-react';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
+  computeKnockoutSummary,
   computeLastStandingStandings,
   getKnockoutSeriesStatus,
   getSingleMatchWinner,
 } from '../utils/tournamentEngine';
+import { resolveMatchOutcome } from '../utils/tournamentStatsEngine';
 import Avatar from './Avatar';
+
+function FormMiniDots({ outcomes = [], align = 'left' }) {
+  if (!outcomes || outcomes.length === 0) return null;
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 ${
+        align === 'right' ? 'justify-end' : 'justify-start'
+      }`}
+      title="Últimos partidos"
+    >
+      {outcomes.map((o, idx) => (
+        <span
+          key={idx}
+          className={`inline-flex h-3.5 w-3.5 items-center justify-center rounded-sm text-[8px] font-black leading-none ${
+            o === 'W'
+              ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+              : o === 'D'
+              ? 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+              : 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
+          }`}
+        >
+          {o === 'W' ? 'G' : o === 'D' ? 'E' : 'P'}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+function ProdeTrendBar({ trend, nameA, nameB, compact = false }) {
+  if (!trend || trend.total === 0) {
+    return (
+      <p className="text-[11px] font-medium text-slate-400 dark:text-slate-500">
+        Sin votos en el Prode aún · ¡Sé el primero!
+      </p>
+    );
+  }
+
+  return (
+    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
+      <div className="flex h-2 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+        {trend.pctA > 0 && (
+          <div
+            className="h-full bg-emerald-500 transition-all duration-300"
+            style={{ width: `${trend.pctA}%` }}
+          />
+        )}
+        {trend.pctDraw > 0 && (
+          <div
+            className="h-full bg-amber-400 transition-all duration-300"
+            style={{ width: `${trend.pctDraw}%` }}
+          />
+        )}
+        {trend.pctB > 0 && (
+          <div
+            className="h-full bg-sky-500 transition-all duration-300"
+            style={{ width: `${trend.pctB}%` }}
+          />
+        )}
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[10px] font-bold tabular-nums">
+        <span className="truncate text-emerald-700 dark:text-emerald-300">
+          {trend.pctA}% {nameA}
+        </span>
+        {trend.pctDraw > 0 && (
+          <span className="text-amber-700 dark:text-amber-300">
+            {trend.pctDraw}% Empate
+          </span>
+        )}
+        <span className="truncate text-sky-700 dark:text-sky-300">
+          {trend.pctB}% {nameB}
+        </span>
+      </div>
+    </div>
+  );
+}
 
 export default function TournamentMatchesTab({
   tournament,
@@ -36,11 +115,111 @@ export default function TournamentMatchesTab({
   onEliminateParticipant,
   onRevertElimination,
   onResetAllEliminations,
+  prodePolls = [],
+  prodeVotes = [],
+  onOpenProde = null,
 }) {
   const [confirmRegenerate, setConfirmRegenerate] = useState(false);
   const [confirmResetEliminations, setConfirmResetEliminations] =
     useState(false);
   const [leagueFilter, setLeagueFilter] = useState('all');
+
+  // Racha reciente G-E-P de cada participante
+  const recentFormMap = useMemo(() => {
+    const map = new Map();
+    const ordered = [...(matches || [])]
+      .filter((m) => !m.is_bye && m.status === 'completed')
+      .sort((a, b) => {
+        if (a.round_number !== b.round_number) {
+          return a.round_number - b.round_number;
+        }
+        if (a.match_order !== b.match_order) {
+          return a.match_order - b.match_order;
+        }
+        return (a.leg || 1) - (b.leg || 1);
+      });
+
+    ordered.forEach((m) => {
+      const outcome = resolveMatchOutcome(m);
+      if (!outcome) return;
+
+      const pushForm = (id, res) => {
+        if (!id) return;
+        if (!map.has(id)) map.set(id, []);
+        map.get(id).push(res);
+      };
+
+      if (outcome.isDraw) {
+        pushForm(m.participant_a_id, 'D');
+        pushForm(m.participant_b_id, 'D');
+      } else {
+        const aWon = outcome.winnerId === m.participant_a_id;
+        pushForm(m.participant_a_id, aWon ? 'W' : 'L');
+        pushForm(m.participant_b_id, aWon ? 'L' : 'W');
+      }
+    });
+
+    const trimmed = new Map();
+    map.forEach((list, id) => {
+      trimmed.set(id, list.slice(-4));
+    });
+    return trimmed;
+  }, [matches]);
+
+  // Mapa de encuestas Prode por match_id o subtournament_match_id
+  const pollByMatchId = useMemo(() => {
+    const map = new Map();
+    if (!prodePolls || prodePolls.length === 0) return map;
+
+    const votesByPoll = new Map();
+    (prodeVotes || []).forEach((v) => {
+      if (!votesByPoll.has(v.poll_id)) votesByPoll.set(v.poll_id, []);
+      votesByPoll.get(v.poll_id).push(v);
+    });
+
+    prodePolls.forEach((poll) => {
+      const targetMatchId = poll.match_id || poll.subtournament_match_id;
+      if (!targetMatchId) return;
+
+      const votes = votesByPoll.get(poll.id) || [];
+      let countA = 0;
+      let countDraw = 0;
+      let countB = 0;
+
+      votes.forEach((v) => {
+        let out = v.predicted_outcome;
+        if (
+          !out &&
+          v.predicted_score_a !== null &&
+          v.predicted_score_b !== null
+        ) {
+          out =
+            v.predicted_score_a > v.predicted_score_b
+              ? 'a'
+              : v.predicted_score_b > v.predicted_score_a
+              ? 'b'
+              : 'draw';
+        }
+        if (out === 'a') countA += 1;
+        else if (out === 'b') countB += 1;
+        else if (out === 'draw') countDraw += 1;
+      });
+
+      const total = countA + countDraw + countB;
+      map.set(targetMatchId, {
+        poll,
+        votesCount: votes.length,
+        trend: {
+          total,
+          pctA: total > 0 ? Math.round((countA / total) * 100) : 0,
+          pctDraw: total > 0 ? Math.round((countDraw / total) * 100) : 0,
+          pctB: total > 0 ? Math.round((countB / total) * 100) : 0,
+        },
+      });
+    });
+
+    return map;
+  }, [prodePolls, prodeVotes]);
 
   async function handleConfirmGenerate() {
     setConfirmRegenerate(false);
@@ -148,7 +327,6 @@ export default function TournamentMatchesTab({
         )}
 
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-          {/* Jugadores en pie */}
           <div className="rounded-2xl border border-emerald-200/80 bg-emerald-50/35 p-4 backdrop-blur-xs dark:border-emerald-500/25 dark:bg-emerald-500/8">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-sm font-bold text-emerald-900 dark:text-emerald-200">
@@ -222,7 +400,6 @@ export default function TournamentMatchesTab({
             )}
           </div>
 
-          {/* Jugadores eliminados */}
           <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-4 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/55">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="flex items-center gap-2 text-sm font-bold text-slate-800 dark:text-slate-200">
@@ -255,7 +432,7 @@ export default function TournamentMatchesTab({
                         className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/85"
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
-                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600 tabular-nums dark:bg-slate-800 dark:text-slate-300">
                             #{elim?.elimination_order}
                           </span>
                           <Avatar
@@ -367,7 +544,7 @@ export default function TournamentMatchesTab({
   const headerControls = (
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/75 px-4 py-3 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/60">
       <div className="flex flex-1 flex-col gap-1.5 sm:max-w-xs">
-        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
+        <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-600 tabular-nums dark:text-slate-300">
           <span className="flex items-center gap-1.5">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>
@@ -539,7 +716,7 @@ export default function TournamentMatchesTab({
                     <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                       {group.roundName}
                     </h3>
-                    <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                    <span className="text-xs font-semibold text-slate-500 tabular-nums dark:text-slate-400">
                       {
                         group.regular.filter((m) => m.status === 'completed')
                           .length
@@ -559,6 +736,145 @@ export default function TournamentMatchesTab({
                         isCompleted &&
                         (m.is_draw || (hasScores && m.score_a === m.score_b));
                       const canEdit = isAdmin && pA && pB;
+                      const pollInfo = pollByMatchId.get(m.id) || null;
+                      const formA = recentFormMap.get(m.participant_a_id) || [];
+                      const formB = recentFormMap.get(m.participant_b_id) || [];
+
+                      // Tarjeta Matchday Broadcast destacada si tiene encuesta de Prode asociada
+                      if (pollInfo) {
+                        const isPollOpen =
+                          pollInfo.poll.status === 'open' && !isCompleted;
+
+                        return (
+                          <div
+                            key={m.id}
+                            className="bg-gradient-to-b from-emerald-50/35 via-white/50 to-transparent p-3.5 sm:p-4 dark:from-emerald-500/8 dark:via-slate-900/40"
+                          >
+                            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                                    isPollOpen
+                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                                      : 'bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                  }`}
+                                >
+                                  {isPollOpen && (
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                                  )}
+                                  <Target className="h-3 w-3" />
+                                  <span>
+                                    {isPollOpen ? 'Prode activo' : 'Prode cerrado'}
+                                  </span>
+                                </span>
+                                <span className="text-[11px] font-semibold text-slate-500 tabular-nums dark:text-slate-400">
+                                  {pollInfo.votesCount}{' '}
+                                  {pollInfo.votesCount === 1 ? 'voto' : 'votos'}
+                                </span>
+                              </div>
+
+                              <div className="flex items-center gap-1.5">
+                                {onOpenProde && isPollOpen && (
+                                  <button
+                                    type="button"
+                                    onClick={onOpenProde}
+                                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300"
+                                  >
+                                    <span>Votar en Prode</span>
+                                  </button>
+                                )}
+                                {canEdit && (
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenMatchModal(m, null)}
+                                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                    <span className="hidden sm:inline">
+                                      {isCompleted ? 'Editar' : 'Resultado'}
+                                    </span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
+                              <div className="flex min-w-0 items-center justify-end gap-2.5">
+                                <div className="min-w-0 text-right">
+                                  <p
+                                    className={`truncate text-xs sm:text-sm ${
+                                      winnerId === m.participant_a_id
+                                        ? 'font-black text-emerald-700 dark:text-emerald-400'
+                                        : 'font-bold text-slate-900 dark:text-white'
+                                    }`}
+                                  >
+                                    {pA?.name || 'Por definir'}
+                                  </p>
+                                  <FormMiniDots outcomes={formA} align="right" />
+                                </div>
+                                <Avatar
+                                  name={pA?.name || '?'}
+                                  url={resolveParticipantAvatar(pA)}
+                                  size="md"
+                                  highlight={winnerId === m.participant_a_id}
+                                />
+                              </div>
+
+                              <div className="flex min-w-[74px] justify-center sm:min-w-[88px]">
+                                {!isCompleted ? (
+                                  <span className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 shadow-2xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                                    <Clock className="h-3.5 w-3.5" />
+                                    <span>VS</span>
+                                  </span>
+                                ) : hasScores ? (
+                                  <span className="rounded-xl bg-slate-900 px-3 py-1.5 font-mono text-sm font-black text-white shadow-xs tabular-nums dark:border dark:border-emerald-500/35 dark:bg-emerald-500/20 dark:text-emerald-200">
+                                    {m.score_a} - {m.score_b}
+                                  </span>
+                                ) : isDraw ? (
+                                  <span className="rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
+                                    Empate
+                                  </span>
+                                ) : (
+                                  <span className="rounded-xl bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                    {winnerId === m.participant_a_id
+                                      ? 'G - P'
+                                      : 'P - G'}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="flex min-w-0 items-center justify-start gap-2.5">
+                                <Avatar
+                                  name={pB?.name || '?'}
+                                  url={resolveParticipantAvatar(pB)}
+                                  size="md"
+                                  highlight={winnerId === m.participant_b_id}
+                                />
+                                <div className="min-w-0 text-left">
+                                  <p
+                                    className={`truncate text-xs sm:text-sm ${
+                                      winnerId === m.participant_b_id
+                                        ? 'font-black text-emerald-700 dark:text-emerald-400'
+                                        : 'font-bold text-slate-900 dark:text-white'
+                                    }`}
+                                  >
+                                    {pB?.name || 'Por definir'}
+                                  </p>
+                                  <FormMiniDots outcomes={formB} align="left" />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/75 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/45">
+                              <ProdeTrendBar
+                                trend={pollInfo.trend}
+                                nameA={pA?.name || 'A'}
+                                nameB={pB?.name || 'B'}
+                              />
+                            </div>
+                          </div>
+                        );
+                      }
 
                       const RowTag = canEdit ? motion.button : motion.div;
 
@@ -572,7 +888,7 @@ export default function TournamentMatchesTab({
                                 onClick: () => onOpenMatchModal(m, null),
                               }
                             : {})}
-                          className={`flex min-h-[52px] w-full items-center justify-between gap-2 px-3 py-3 text-left transition-colors sm:gap-3 sm:px-4 ${
+                          className={`flex min-h-[54px] w-full items-center justify-between gap-2 px-3 py-3 text-left transition-colors sm:gap-3 sm:px-4 ${
                             canEdit
                               ? 'cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10'
                               : ''
@@ -580,17 +896,24 @@ export default function TournamentMatchesTab({
                         >
                           <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
                             <div className="flex min-w-0 items-center justify-end gap-2">
-                              <span
-                                className={`truncate text-right text-xs sm:text-sm ${
-                                  winnerId === m.participant_a_id
-                                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                    : isDraw
-                                    ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                    : 'font-medium text-slate-800 dark:text-slate-200'
-                                }`}
-                              >
-                                {pA?.name || 'Por definir'}
-                              </span>
+                              <div className="min-w-0 text-right">
+                                <span
+                                  className={`block truncate text-xs sm:text-sm ${
+                                    winnerId === m.participant_a_id
+                                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                                      : isDraw
+                                      ? 'font-semibold text-slate-700 dark:text-slate-300'
+                                      : 'font-medium text-slate-800 dark:text-slate-200'
+                                  }`}
+                                >
+                                  {pA?.name || 'Por definir'}
+                                </span>
+                                {formA.length > 0 && (
+                                  <div className="hidden sm:block">
+                                    <FormMiniDots outcomes={formA} align="right" />
+                                  </div>
+                                )}
+                              </div>
                               <Avatar
                                 name={pA?.name || '?'}
                                 url={resolveParticipantAvatar(pA)}
@@ -606,7 +929,7 @@ export default function TournamentMatchesTab({
                                   <span>vs</span>
                                 </span>
                               ) : hasScores ? (
-                                <span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-2xs dark:border dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200">
+                                <span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-2xs tabular-nums dark:border dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200">
                                   {m.score_a} - {m.score_b}
                                 </span>
                               ) : isDraw ? (
@@ -629,17 +952,24 @@ export default function TournamentMatchesTab({
                                 size="xs"
                                 className="hidden sm:inline-flex"
                               />
-                              <span
-                                className={`truncate text-left text-xs sm:text-sm ${
-                                  winnerId === m.participant_b_id
-                                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                    : isDraw
-                                    ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                    : 'font-medium text-slate-800 dark:text-slate-200'
-                                }`}
-                              >
-                                {pB?.name || 'Por definir'}
-                              </span>
+                              <div className="min-w-0 text-left">
+                                <span
+                                  className={`block truncate text-xs sm:text-sm ${
+                                    winnerId === m.participant_b_id
+                                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                                      : isDraw
+                                      ? 'font-semibold text-slate-700 dark:text-slate-300'
+                                      : 'font-medium text-slate-800 dark:text-slate-200'
+                                  }`}
+                                >
+                                  {pB?.name || 'Por definir'}
+                                </span>
+                                {formB.length > 0 && (
+                                  <div className="hidden sm:block">
+                                    <FormMiniDots outcomes={formB} align="left" />
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
 
@@ -676,6 +1006,7 @@ export default function TournamentMatchesTab({
   }
 
   // Vista de ELIMINATORIA
+  const koSummary = computeKnockoutSummary(participants, matches);
   const roundsMap = new Map();
   let thirdPlaceMatch = null;
 
@@ -713,6 +1044,30 @@ export default function TournamentMatchesTab({
 
   return (
     <div>
+      {koSummary.champion && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="podium-gold mb-5 flex items-center gap-3.5 rounded-2xl border p-4"
+        >
+          <Avatar
+            name={koSummary.champion.name}
+            url={resolveParticipantAvatar(koSummary.champion)}
+            size="lg"
+            highlight
+          />
+          <div>
+            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+              <Crown className="h-3.5 w-3.5" />
+              <span>¡Campeón de la Eliminatoria!</span>
+            </span>
+            <p className="text-lg font-black text-slate-900 dark:text-white">
+              {koSummary.champion.name}
+            </p>
+          </div>
+        </motion.div>
+      )}
+
       {headerControls}
 
       <div className="flex gap-4 overflow-x-auto pb-3">
@@ -725,7 +1080,7 @@ export default function TournamentMatchesTab({
               duration: 0.25,
               delay: Math.min(roundIdx * 0.06, 0.3),
             }}
-            className="flex min-w-[275px] flex-1 flex-col gap-3"
+            className="flex min-w-[285px] flex-1 flex-col gap-3"
           >
             <div className="rounded-xl border border-slate-200/80 bg-slate-100/85 px-3.5 py-2 text-center backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/90">
               <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
@@ -771,6 +1126,7 @@ export default function TournamentMatchesTab({
                 }
 
                 const isSingleLeg = !leg2;
+                const leg1Poll = pollByMatchId.get(leg1.id) || null;
 
                 if (isSingleLeg) {
                   const canEdit =
@@ -781,95 +1137,117 @@ export default function TournamentMatchesTab({
                   const CardTag = canEdit ? motion.button : motion.div;
 
                   return (
-                    <CardTag
+                    <div
                       key={matchOrder}
-                      {...(canEdit
-                        ? {
-                            type: 'button',
-                            whileTap: { scale: 0.985 },
-                            onClick: () => onOpenMatchModal(leg1, null),
-                          }
-                        : {})}
-                      className={`min-h-[44px] w-full rounded-2xl border bg-white/85 p-3 text-left backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
+                      className={`rounded-2xl border bg-white/85 p-3 backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
                         series.isCompleted
                           ? 'border-emerald-300/80 dark:border-emerald-500/35'
+                          : leg1Poll
+                          ? 'border-emerald-300/90 dark:border-emerald-500/40'
                           : 'border-slate-200/80 dark:border-slate-800'
-                      } ${
-                        canEdit
-                          ? 'cursor-pointer hover:border-emerald-400 hover:shadow-xs dark:hover:border-emerald-400/60'
-                          : ''
                       }`}
                     >
-                      <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
-                        <span className="font-semibold">Llave {matchOrder}</span>
-                        {canEdit && <Pencil className="h-3 w-3" />}
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <div
-                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
-                            series.winnerId === leg1.participant_a_id
-                              ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                              : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                          }`}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Avatar
-                              name={player1?.name || '?'}
-                              url={resolveParticipantAvatar(player1)}
-                              size="xs"
-                            />
-                            <span className="truncate">
-                              {player1?.name || 'Por definir'}
-                            </span>
+                      <CardTag
+                        {...(canEdit
+                          ? {
+                              type: 'button',
+                              whileTap: { scale: 0.985 },
+                              onClick: () => onOpenMatchModal(leg1, null),
+                            }
+                          : {})}
+                        className={`min-h-[44px] w-full text-left ${
+                          canEdit ? 'cursor-pointer' : ''
+                        }`}
+                      >
+                        <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
+                          <span className="font-semibold">Llave {matchOrder}</span>
+                          <div className="flex items-center gap-1.5">
+                            {leg1Poll && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                <Target className="h-2.5 w-2.5" />
+                                <span>Prode</span>
+                              </span>
+                            )}
+                            {canEdit && <Pencil className="h-3 w-3" />}
                           </div>
-                          <span className="ml-2 font-mono text-xs font-bold">
-                            {hasScores
-                              ? leg1.score_a
-                              : series.winnerId === leg1.participant_a_id
-                              ? 'G'
-                              : ''}
-                          </span>
                         </div>
 
-                        <div
-                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
-                            series.winnerId === leg1.participant_b_id
-                              ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                              : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                          }`}
-                        >
-                          <div className="flex min-w-0 items-center gap-2">
-                            <Avatar
-                              name={player2?.name || '?'}
-                              url={resolveParticipantAvatar(player2)}
-                              size="xs"
-                            />
-                            <span className="truncate">
-                              {player2?.name || 'Por definir'}
+                        <div className="space-y-1.5">
+                          <div
+                            className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
+                              series.winnerId === leg1.participant_a_id
+                                ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                                : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                            }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Avatar
+                                name={player1?.name || '?'}
+                                url={resolveParticipantAvatar(player1)}
+                                size="xs"
+                              />
+                              <span className="truncate">
+                                {player1?.name || 'Por definir'}
+                              </span>
+                            </div>
+                            <span className="ml-2 font-mono text-xs font-bold tabular-nums">
+                              {hasScores
+                                ? leg1.score_a
+                                : series.winnerId === leg1.participant_a_id
+                                ? 'G'
+                                : ''}
                             </span>
                           </div>
-                          <span className="ml-2 font-mono text-xs font-bold">
-                            {hasScores
-                              ? leg1.score_b
-                              : series.winnerId === leg1.participant_b_id
-                              ? 'G'
-                              : ''}
-                          </span>
-                        </div>
-                      </div>
 
-                      {series.resolvedByTiebreak && (
-                        <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                          Avanza por desempate:{' '}
-                          {participantMap.get(series.winnerId)?.name}
-                        </p>
+                          <div
+                            className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
+                              series.winnerId === leg1.participant_b_id
+                                ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                                : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                            }`}
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Avatar
+                                name={player2?.name || '?'}
+                                url={resolveParticipantAvatar(player2)}
+                                size="xs"
+                              />
+                              <span className="truncate">
+                                {player2?.name || 'Por definir'}
+                              </span>
+                            </div>
+                            <span className="ml-2 font-mono text-xs font-bold tabular-nums">
+                              {hasScores
+                                ? leg1.score_b
+                                : series.winnerId === leg1.participant_b_id
+                                ? 'G'
+                                : ''}
+                            </span>
+                          </div>
+                        </div>
+
+                        {series.resolvedByTiebreak && (
+                          <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                            Avanza por desempate:{' '}
+                            {participantMap.get(series.winnerId)?.name}
+                          </p>
+                        )}
+                      </CardTag>
+
+                      {leg1Poll && (
+                        <div className="mt-2.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+                          <ProdeTrendBar
+                            compact
+                            trend={leg1Poll.trend}
+                            nameA={player1?.name || 'A'}
+                            nameB={player2?.name || 'B'}
+                          />
+                        </div>
                       )}
-                    </CardTag>
+                    </div>
                   );
                 }
 
-                // Llave ida y vuelta
                 const bothPlayersReady = Boolean(
                   leg1.participant_a_id && leg1.participant_b_id
                 );
@@ -886,7 +1264,7 @@ export default function TournamentMatchesTab({
                     <div className="mb-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
                       <span className="font-semibold">Llave {matchOrder}</span>
                       {series.hasAggregate && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 tabular-nums dark:bg-slate-800 dark:text-slate-200">
                           Global: {series.agg1} - {series.agg2}
                         </span>
                       )}
@@ -950,6 +1328,7 @@ export default function TournamentMatchesTab({
                         const legHasScores =
                           legMatch.score_a !== null && legMatch.score_b !== null;
                         const legWinner = getSingleMatchWinner(legMatch);
+                        const legPoll = pollByMatchId.get(legMatch.id);
 
                         return (
                           <LegTag
@@ -968,10 +1347,13 @@ export default function TournamentMatchesTab({
                                 : ''
                             }`}
                           >
-                            <span className="font-semibold text-slate-600 dark:text-slate-300">
-                              {legMatch.leg === 1 ? 'Ida' : 'Vuelta'}
+                            <span className="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                              <span>{legMatch.leg === 1 ? 'Ida' : 'Vuelta'}</span>
+                              {legPoll && (
+                                <Target className="h-3 w-3 text-emerald-500" />
+                              )}
                             </span>
-                            <span className="font-mono font-bold text-slate-800 dark:text-slate-100">
+                            <span className="font-mono font-bold text-slate-800 tabular-nums dark:text-slate-100">
                               {legMatch.status === 'pending'
                                 ? 'Pendiente'
                                 : legHasScores
@@ -1055,7 +1437,7 @@ export default function TournamentMatchesTab({
               />
             </div>
 
-            <span className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+            <span className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-800 tabular-nums dark:bg-slate-800 dark:text-slate-100">
               {thirdPlaceMatch.status === 'completed'
                 ? thirdPlaceMatch.score_a !== null &&
                   thirdPlaceMatch.score_b !== null

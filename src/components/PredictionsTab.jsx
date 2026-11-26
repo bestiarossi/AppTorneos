@@ -33,16 +33,27 @@ export default function PredictionsTab({
   isAdmin = false,
   currentUserId,
   myLinkedParticipant = null,
+  externalPolls = null,
+  externalVotes = null,
+  externalLoading = false,
+  onRefreshExternal = null,
 }) {
-  const [polls, setPolls] = useState([]);
-  const [votes, setVotes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const hasExternalState = Array.isArray(externalPolls);
+
+  const [localPolls, setLocalPolls] = useState([]);
+  const [localVotes, setLocalVotes] = useState([]);
+  const [localLoading, setLocalLoading] = useState(!hasExternalState);
   const [error, setError] = useState('');
 
-  const [subView, setSubView] = useState('polls'); // 'polls' | 'standings'
+  const [subView, setSubView] = useState('polls');
   const [isCreateOpen, setIsCreateOpen] = useState(false);
 
-  const loadPredictions = useCallback(async () => {
+  const loadLocalPredictions = useCallback(async () => {
+    if (hasExternalState) {
+      if (onRefreshExternal) await onRefreshExternal();
+      return;
+    }
+
     if (!supabase || !tournament?.id) return;
     setError('');
 
@@ -56,7 +67,7 @@ export default function PredictionsTab({
       if (pollsErr) throw pollsErr;
 
       const list = pollRows || [];
-      setPolls(list);
+      setLocalPolls(list);
 
       if (list.length > 0) {
         const pollIds = list.map((p) => p.id);
@@ -66,24 +77,25 @@ export default function PredictionsTab({
           .in('poll_id', pollIds);
 
         if (votesErr) throw votesErr;
-        setVotes(voteRows || []);
+        setLocalVotes(voteRows || []);
       } else {
-        setVotes([]);
+        setLocalVotes([]);
       }
     } catch (err) {
       setError(err?.message || 'No se pudieron cargar las encuestas del Prode.');
     } finally {
-      setLoading(false);
+      setLocalLoading(false);
     }
-  }, [tournament?.id]);
+  }, [hasExternalState, onRefreshExternal, tournament?.id]);
 
   useEffect(() => {
-    setLoading(true);
-    loadPredictions();
-  }, [loadPredictions, matches, subMatches, subtournaments]);
+    if (hasExternalState) return;
+    setLocalLoading(true);
+    loadLocalPredictions();
+  }, [hasExternalState, loadLocalPredictions, matches, subMatches, subtournaments]);
 
   useEffect(() => {
-    if (!supabase || !tournament?.id) return;
+    if (hasExternalState || !supabase || !tournament?.id) return;
 
     const channel = supabase
       .channel(`prode-${tournament.id}`)
@@ -96,7 +108,7 @@ export default function PredictionsTab({
           filter: `tournament_id=eq.${tournament.id}`,
         },
         () => {
-          loadPredictions();
+          loadLocalPredictions();
         }
       )
       .on(
@@ -107,7 +119,7 @@ export default function PredictionsTab({
           table: 'prediction_votes',
         },
         () => {
-          loadPredictions();
+          loadLocalPredictions();
         }
       )
       .subscribe();
@@ -115,7 +127,11 @@ export default function PredictionsTab({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [tournament?.id, loadPredictions]);
+  }, [hasExternalState, tournament?.id, loadLocalPredictions]);
+
+  const polls = hasExternalState ? externalPolls : localPolls;
+  const votes = hasExternalState ? externalVotes || [] : localVotes;
+  const loading = hasExternalState ? externalLoading : localLoading;
 
   const votesByPollId = useMemo(() => {
     const map = new Map();
@@ -211,7 +227,6 @@ export default function PredictionsTab({
 
   return (
     <div className="space-y-5">
-      {/* Barra superior del Prode */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900 dark:text-white">
@@ -236,7 +251,6 @@ export default function PredictionsTab({
         )}
       </div>
 
-      {/* Selector Encuestas / Tabla del Prode */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="inline-flex rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-slate-800 dark:bg-slate-950/70">
           <button
@@ -343,7 +357,7 @@ export default function PredictionsTab({
                             myLinkedParticipant={myLinkedParticipant}
                             currentUserId={currentUserId}
                             isAdmin={isAdmin}
-                            onChanged={loadPredictions}
+                            onChanged={loadLocalPredictions}
                           />
                         ))}
                       </div>
@@ -366,7 +380,7 @@ export default function PredictionsTab({
                             myLinkedParticipant={myLinkedParticipant}
                             currentUserId={currentUserId}
                             isAdmin={isAdmin}
-                            onChanged={loadPredictions}
+                            onChanged={loadLocalPredictions}
                           />
                         ))}
                       </div>
@@ -424,7 +438,7 @@ export default function PredictionsTab({
                           <th className="px-4 py-3 text-right">Pts</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      <tbody className="divide-y divide-slate-100 tabular-nums dark:divide-slate-800/80">
                         {leaderboard.map((row) => {
                           const isMine = row.participant.user_id === currentUserId;
                           const hasPts = row.points > 0;
@@ -522,7 +536,7 @@ export default function PredictionsTab({
         participantMap={participantMap}
         existingPolls={polls}
         onClose={() => setIsCreateOpen(false)}
-        onCreated={loadPredictions}
+        onCreated={loadLocalPredictions}
       />
     </div>
   );

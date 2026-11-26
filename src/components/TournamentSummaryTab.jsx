@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity,
-  Award,
   Check,
   Copy,
   Crown,
   Flame,
   Handshake,
+  Image as ImageIcon,
   Medal,
   ShieldAlert,
   ShieldCheck,
@@ -26,6 +26,8 @@ import {
 } from '../utils/statsEngine';
 import { copyTextToClipboard } from '../utils/whatsappShare';
 import Avatar from './Avatar';
+import ShareCardModal from './ShareCardModal';
+import { useToast } from './ToastProvider';
 import WhatsAppShareButton from './WhatsAppShareButton';
 
 const PODIUM_STYLES = {
@@ -125,8 +127,11 @@ export default function TournamentSummaryTab({
   subEntryMembers = [],
   subMatches = [],
   currentUserId,
+  prodeLeader = null,
 }) {
+  const toast = useToast();
   const [copiedSummary, setCopiedSummary] = useState(false);
+  const [isShareCardOpen, setIsShareCardOpen] = useState(false);
   const [h2hPlayerAId, setH2hPlayerAId] = useState('');
   const [h2hPlayerBId, setH2hPlayerBId] = useState('');
 
@@ -215,6 +220,7 @@ export default function TournamentSummaryTab({
     const ok = await copyTextToClipboard(text);
     if (ok) {
       setCopiedSummary(true);
+      toast.success('¡Resumen copiado para WhatsApp!');
       setTimeout(() => setCopiedSummary(false), 2200);
     }
   }
@@ -255,7 +261,6 @@ export default function TournamentSummaryTab({
 
   return (
     <div className="space-y-6">
-      {/* Cabecera con acciones de WhatsApp */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-base font-extrabold text-slate-900 dark:text-white">
@@ -272,6 +277,16 @@ export default function TournamentSummaryTab({
             <motion.button
               whileTap={{ scale: 0.96 }}
               type="button"
+              onClick={() => setIsShareCardOpen(true)}
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm shadow-indigo-600/20 transition hover:from-indigo-500 hover:to-violet-500"
+            >
+              <ImageIcon className="h-4 w-4" />
+              <span>Placa PNG</span>
+            </motion.button>
+
+            <motion.button
+              whileTap={{ scale: 0.96 }}
+              type="button"
               onClick={handleCopySummary}
               className={`inline-flex min-h-[44px] items-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-bold transition ${
                 copiedSummary
@@ -282,26 +297,26 @@ export default function TournamentSummaryTab({
               {copiedSummary ? (
                 <>
                   <Check className="h-4 w-4" />
-                  <span>¡Resumen copiado!</span>
+                  <span>¡Copiado!</span>
                 </>
               ) : (
                 <>
                   <Copy className="h-4 w-4" />
-                  <span>Copiar resumen para WhatsApp</span>
+                  <span className="hidden sm:inline">Copiar resumen</span>
+                  <span className="sm:hidden">Texto</span>
                 </>
               )}
             </motion.button>
 
             <WhatsAppShareButton
               compact
-              label="Enviar"
+              label="WhatsApp"
               getText={() => buildTournamentSummaryWhatsAppText(tournament, summary)}
             />
           </div>
         )}
       </div>
 
-      {/* Podio principal con Avatares */}
       {podiumDisplayOrder.length > 0 && (
         <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
           {podiumDisplayOrder.map((item, idx) => {
@@ -349,7 +364,7 @@ export default function TournamentSummaryTab({
                     <p className="truncate text-sm font-black text-slate-900 dark:text-white">
                       {item.participant.name}
                     </p>
-                    <p className="text-xs font-extrabold text-emerald-700 dark:text-emerald-300">
+                    <p className="text-xs font-extrabold text-emerald-700 tabular-nums dark:text-emerald-300">
                       {item.metric}
                     </p>
                     <p className="truncate text-[11px] text-slate-600 dark:text-slate-300">
@@ -363,7 +378,6 @@ export default function TournamentSummaryTab({
         </div>
       )}
 
-      {/* Tarjetas de premios reales y humor */}
       {!hasAnyAward ? (
         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
           Todavía no hay suficientes partidos o subtorneos finalizados para repartir los premios (MVP, Paternidad, Cuchara de Madera, etc.).
@@ -469,7 +483,6 @@ export default function TournamentSummaryTab({
         </div>
       )}
 
-      {/* Selector rápido Mano a Mano (H2H) */}
       {participants.length >= 2 && (
         <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 backdrop-blur-sm sm:p-5 dark:border-slate-800 dark:bg-slate-900/65">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -527,7 +540,7 @@ export default function TournamentSummaryTab({
             </p>
           ) : (
             <div className="space-y-3">
-              <div className="grid grid-cols-3 items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 text-center dark:border-slate-800 dark:bg-slate-950/50">
+              <div className="grid grid-cols-3 items-center gap-2 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-4 text-center tabular-nums dark:border-slate-800 dark:bg-slate-950/50">
                 <div className="flex flex-col items-center gap-1.5">
                   <Avatar
                     name={quickH2H.playerA.name}
@@ -587,7 +600,7 @@ export default function TournamentSummaryTab({
                       <span className="text-slate-500 dark:text-slate-400">
                         {c.label}
                       </span>
-                      <span className="font-bold text-slate-900 dark:text-slate-100">
+                      <span className="font-bold text-slate-900 tabular-nums dark:text-slate-100">
                         {c.hasScores
                           ? `${quickH2H.playerA.name} ${c.scoreA} - ${c.scoreB} ${quickH2H.playerB.name}`
                           : c.winnerSide === 'draw'
@@ -606,6 +619,14 @@ export default function TournamentSummaryTab({
           )}
         </div>
       )}
+
+      <ShareCardModal
+        isOpen={isShareCardOpen}
+        tournament={tournament}
+        summary={summary}
+        prodeLeader={prodeLeader}
+        onClose={() => setIsShareCardOpen(false)}
+      />
     </div>
   );
 }

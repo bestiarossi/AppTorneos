@@ -60,10 +60,6 @@ function buildChronologicalStandardMatches(matches = []) {
     });
 }
 
-/**
- * Calcula el resumen completo, podio y métricas graciosas del torneo
- * soportando formatos: league, knockout, last_standing y custom.
- */
 export function computeTournamentSummary({
   tournament,
   participants = [],
@@ -106,7 +102,6 @@ export function computeTournamentSummary({
   const matchdayMap = new Map(customMatchdays.map((md) => [md.id, md]));
   const entryMap = new Map(subEntries.map((e) => [e.id, e]));
 
-  // Estadísticas acumuladas por participante a partir de todos los partidos reales jugados
   const pStats = new Map();
   participants.forEach((p) => {
     pStats.set(p.id, {
@@ -120,14 +115,13 @@ export function computeTournamentSummary({
       gc: 0,
       scoredMatches: 0,
       margins: [],
-      outcomes: [], // 'W' | 'D' | 'L'
+      outcomes: [],
       bestUnbeatenStreak: 0,
       currentUnbeatenStreak: 0,
-      subRanks: [], // para custom
+      subRanks: [],
     });
   });
 
-  // Matriz de duelos directos: key "id1|id2" (ordenado) -> { id1, id2, wins1, wins2, draws, goals1, goals2 }
   const pairClashes = new Map();
 
   function recordPairClash(idA, idB, outcomeForA, scoreA = null, scoreB = null) {
@@ -223,7 +217,6 @@ export function computeTournamentSummary({
       applySideStats(idsA, aWon, outcome.isDraw, outcome.scoreA ?? 0, outcome.scoreB ?? 0);
       applySideStats(idsB, bWon, outcome.isDraw, outcome.scoreB ?? 0, outcome.scoreA ?? 0);
 
-      // Cruces directos entre integrantes de equipos opuestos
       idsA.forEach((idA) => {
         idsB.forEach((idB) => {
           if (idA === idB) return;
@@ -299,7 +292,6 @@ export function computeTournamentSummary({
     });
   }
 
-  // Calcular rachas imbatibles de cada jugador
   pStats.forEach((st) => {
     let run = 0;
     let best = 0;
@@ -317,7 +309,6 @@ export function computeTournamentSummary({
 
   const allStatsList = Array.from(pStats.values());
 
-  // 1. PODIO GENERAL
   let podium = [];
   let progressLabel = '';
 
@@ -394,7 +385,7 @@ export function computeTournamentSummary({
         metric: 'Campeón',
         subtext: 'Último superviviente en pie',
       });
-      const revElims = [...ls.eliminated]; // ya viene de último eliminado a primero
+      const revElims = [...ls.eliminated];
       if (revElims[0]) {
         podium.push({
           place: 2,
@@ -415,7 +406,6 @@ export function computeTournamentSummary({
     progressLabel = `${ls.stillStanding.length} en pie de ${participants.length} jugadores`;
   }
 
-  // 2. MVP y CUCHARA DE MADERA + MONTANA RUSA
   let mvp = null;
   let woodenSpoon = null;
   let rollerCoaster = null;
@@ -424,7 +414,6 @@ export function computeTournamentSummary({
     const completedSubs = subtournaments.filter((s) => s.status === 'completed');
     const completedSubMap = new Map(completedSubs.map((s) => [s.id, s]));
 
-    // Contar participantes por subtorneo para calcular puestos relativos
     const entryCountBySub = new Map();
     subEntries.forEach((e) => {
       entryCountBySub.set(
@@ -475,7 +464,6 @@ export function computeTournamentSummary({
     });
 
     if (singleSubPerformances.length > 0) {
-      // Mejor desempeño: mayor puntaje en un subtorneo (desempate: mejor puesto, luego 1.º puesto)
       const bestPerf = [...singleSubPerformances].sort((a, b) => {
         if (b.points !== a.points) return b.points - a.points;
         const rA = a.rank ?? 999;
@@ -494,7 +482,6 @@ export function computeTournamentSummary({
         };
       }
 
-      // Peor desempeño (Cuchara de madera): menor puntaje y peor puesto relativo
       const worstPerf = [...singleSubPerformances].sort((a, b) => {
         if (a.points !== b.points) return a.points - b.points;
         const relA = a.rank ? a.rank / a.totalInSub : 0;
@@ -516,7 +503,6 @@ export function computeTournamentSummary({
       }
     }
 
-    // Fallback MVP si solo hubo partidos internos sin finalizar subtorneos
     if (!mvp) {
       const activePlayer = [...allStatsList]
         .filter((s) => s.pj > 0)
@@ -537,7 +523,6 @@ export function computeTournamentSummary({
       }
     }
 
-    // Montaña Rusa: mayor varianza entre puestos en subtorneos completados
     const irregularCandidates = allStatsList
       .filter((st) => st.subRanks.length >= 2)
       .map((st) => {
@@ -594,7 +579,6 @@ export function computeTournamentSummary({
       }
     }
   } else {
-    // League / Knockout
     const playersPlayed = allStatsList.filter((s) => s.pj > 0);
     if (playersPlayed.length > 0) {
       const best = [...playersPlayed].sort((a, b) => {
@@ -631,7 +615,6 @@ export function computeTournamentSummary({
         }
       }
 
-      // Montaña Rusa basada en variación de diferencia de gol por partido
       const marginSwings = playersPlayed
         .filter((s) => s.margins.length >= 2)
         .map((s) => {
@@ -666,7 +649,6 @@ export function computeTournamentSummary({
     }
   }
 
-  // 3. MAYOR PATERNIDAD
   let biggestDaddy = null;
   const clashCandidates = Array.from(pairClashes.values())
     .map((c) => {
@@ -702,7 +684,6 @@ export function computeTournamentSummary({
       detail: `Historial ${top.winsParent}G - ${top.draws}E - ${top.winsChild}P (${top.total} cruces)`,
     };
   } else if (format === 'custom') {
-    // Fallback para custom cuando aún no hay cruces 1v1/equipos cargados pero sí posiciones en subtorneos
     const completedSubs = subtournaments.filter((s) => s.status === 'completed');
     const rankCompMap = new Map();
     const entriesBySub = new Map();
@@ -771,7 +752,6 @@ export function computeTournamentSummary({
     }
   }
 
-  // 4. EL ABONADO AL EMPATE
   const drawCandidates = allStatsList
     .filter((s) => s.pe > 0 && s.pj > 0)
     .map((s) => ({
@@ -794,7 +774,6 @@ export function computeTournamentSummary({
       }
     : null;
 
-  // 5. MÁQUINA DE GOLES Y EL COLADOR
   const scoredPlayers = allStatsList.filter((s) => s.scoredMatches > 0);
   let goalMachine = null;
   let sieveDefense = null;
@@ -833,7 +812,6 @@ export function computeTournamentSummary({
     }
   }
 
-  // 6. RACHA IMBATIBLE
   const streakLeader = [...allStatsList]
     .filter((s) => s.bestUnbeatenStreak > 0)
     .sort((a, b) => {
@@ -881,9 +859,6 @@ export function computeTournamentSummary({
   };
 }
 
-/**
- * Selector rápido de H2H entre dos jugadores cualesquiera en el torneo.
- */
 export function computeQuickH2H({
   tournament,
   participantMap,
@@ -1057,9 +1032,6 @@ export function computeQuickH2H({
   };
 }
 
-/**
- * Formatea el resumen completo del torneo listo para copiar y pegar en WhatsApp.
- */
 export function buildTournamentSummaryWhatsAppText(tournament, summary) {
   if (!tournament || !summary) return '';
 
