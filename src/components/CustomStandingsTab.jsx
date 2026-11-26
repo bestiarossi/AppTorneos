@@ -9,6 +9,8 @@ import {
   Trophy,
   Users,
 } from 'lucide-react';
+import { resolveParticipantAvatar } from '../utils/avatarUpload';
+import Avatar from './Avatar';
 import WhatsAppShareButton from './WhatsAppShareButton';
 
 function formatPoints(value) {
@@ -86,13 +88,21 @@ function CustomPodiumShowcase({ items = [] }) {
               )}
             </div>
 
-            <div className="mt-2.5">
-              <p className="truncate text-sm font-black text-slate-900 dark:text-white">
-                {item.name}
-              </p>
-              <p className="mt-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                {item.subtitle}
-              </p>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <Avatar
+                name={item.name}
+                url={item.avatarUrl}
+                size="md"
+                highlight={item.place === 1}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-900 dark:text-white">
+                  {item.name}
+                </p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {item.subtitle}
+                </p>
+              </div>
             </div>
           </motion.div>
         );
@@ -256,6 +266,7 @@ export default function CustomStandingsTab({
       id: row.participant.id,
       place: idx + 1,
       name: row.participant.name,
+      avatarUrl: resolveParticipantAvatar(row.participant),
       subtitle: `${formatPoints(row.totalPoints)} pts · ${row.firstPlaces} ${
         row.firstPlaces === 1 ? 'victoria' : 'victorias'
       }`,
@@ -367,13 +378,22 @@ export default function CustomStandingsTab({
             <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
             <span>Líder actual</span>
           </span>
-          <span className="mt-1 block truncate text-sm font-black text-slate-900 dark:text-white">
-            {leader
-              ? `${leader.participant.name} (${formatPoints(
-                  leader.totalPoints
-                )} pts)`
-              : 'Sin puntos aún'}
-          </span>
+          <div className="mt-1 flex items-center gap-2">
+            {leader && (
+              <Avatar
+                name={leader.participant.name}
+                url={resolveParticipantAvatar(leader.participant)}
+                size="xs"
+              />
+            )}
+            <span className="block truncate text-sm font-black text-slate-900 dark:text-white">
+              {leader
+                ? `${leader.participant.name} (${formatPoints(
+                    leader.totalPoints
+                  )} pts)`
+                : 'Sin puntos aún'}
+            </span>
+          </div>
         </motion.div>
       </div>
 
@@ -495,7 +515,13 @@ export default function CustomStandingsTab({
                         </td>
 
                         <td className="px-3 py-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2.5">
+                            <Avatar
+                              name={row.participant.name}
+                              url={resolveParticipantAvatar(row.participant)}
+                              size="sm"
+                              highlight={isCurrentUser}
+                            />
                             <span className="font-bold text-slate-900 dark:text-slate-100">
                               {row.participant.name}
                             </span>

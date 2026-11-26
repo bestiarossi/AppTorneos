@@ -8,7 +8,9 @@ import {
   Trophy,
   Users,
 } from 'lucide-react';
+import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import { getKnockoutSeriesStatus } from '../utils/tournamentEngine';
+import Avatar from './Avatar';
 import WhatsAppShareButton from './WhatsAppShareButton';
 
 const PODIUM_STYLES = {
@@ -38,7 +40,6 @@ const PODIUM_STYLES = {
 function PodiumShowcase({ items = [] }) {
   if (items.length === 0) return null;
 
-  // Orden visual olímpico en desktop: 2.º (izq) - 1.º (centro elevado) - 3.º (der)
   const displayOrder =
     items.length >= 3
       ? [
@@ -82,13 +83,21 @@ function PodiumShowcase({ items = [] }) {
               )}
             </div>
 
-            <div className="mt-2.5">
-              <p className="truncate text-sm font-black text-slate-900 dark:text-white">
-                {item.name}
-              </p>
-              <p className="mt-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300">
-                {item.subtitle}
-              </p>
+            <div className="mt-2.5 flex items-center gap-2.5">
+              <Avatar
+                name={item.name}
+                url={item.avatarUrl}
+                size="md"
+                highlight={item.place === 1}
+              />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-black text-slate-900 dark:text-white">
+                  {item.name}
+                </p>
+                <p className="mt-0.5 truncate text-xs font-semibold text-slate-600 dark:text-slate-300">
+                  {item.subtitle}
+                </p>
+              </div>
             </div>
           </motion.div>
         );
@@ -373,6 +382,7 @@ export default function TournamentStandingsTab({
           id: row.participant.id,
           place: row.rank,
           name: row.participant.name,
+          avatarUrl: resolveParticipantAvatar(row.participant),
           subtitle: `${row.points} pts · DG ${dg}`,
           isCurrentUser:
             Boolean(currentUserId) && row.participant.user_id === currentUserId,
@@ -389,6 +399,7 @@ export default function TournamentStandingsTab({
         id: row.participant.id,
         place: row.finalPlace,
         name: row.participant.name,
+        avatarUrl: resolveParticipantAvatar(row.participant),
         subtitle: row.statusLabel,
         isCurrentUser:
           Boolean(currentUserId) && row.participant.user_id === currentUserId,
@@ -556,7 +567,13 @@ export default function TournamentStandingsTab({
                       </td>
 
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar
+                            name={row.participant.name}
+                            url={resolveParticipantAvatar(row.participant)}
+                            size="sm"
+                            highlight={isCurrentUser}
+                          />
                           <span className="font-bold text-slate-900 dark:text-slate-100">
                             {row.participant.name}
                           </span>
@@ -665,7 +682,13 @@ export default function TournamentStandingsTab({
                       </td>
 
                       <td className="px-3 py-2.5">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar
+                            name={row.participant.name}
+                            url={resolveParticipantAvatar(row.participant)}
+                            size="sm"
+                            highlight={isCurrentUser}
+                          />
                           <span className="font-bold text-slate-900 dark:text-slate-100">
                             {row.participant.name}
                           </span>
@@ -731,7 +754,7 @@ export default function TournamentStandingsTab({
                   duration: 0.22,
                   delay: Math.min(idx * 0.04, 0.35),
                 }}
-                className={`flex items-center justify-between rounded-2xl border px-3.5 py-3 transition ${
+                className={`flex items-center justify-between gap-2 rounded-2xl border px-3.5 py-3 transition ${
                   row.isChampion
                     ? 'podium-gold'
                     : row.isActive
@@ -739,7 +762,7 @@ export default function TournamentStandingsTab({
                     : 'border-slate-200/80 bg-white/75 opacity-85 dark:border-slate-800 dark:bg-slate-900/50'
                 }`}
               >
-                <div className="flex items-center gap-2.5">
+                <div className="flex min-w-0 items-center gap-2.5">
                   <span
                     className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-extrabold ${
                       row.isChampion
@@ -752,10 +775,17 @@ export default function TournamentStandingsTab({
                     {row.rank}
                   </span>
 
-                  <div>
+                  <Avatar
+                    name={row.participant.name}
+                    url={resolveParticipantAvatar(row.participant)}
+                    size="sm"
+                    highlight={row.isChampion}
+                  />
+
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <span
-                        className={`text-sm font-bold ${
+                        className={`truncate text-sm font-bold ${
                           row.isActive
                             ? 'text-slate-900 dark:text-white'
                             : 'text-slate-500 line-through dark:text-slate-400'
@@ -773,7 +803,7 @@ export default function TournamentStandingsTab({
                 </div>
 
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
+                  className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-bold ${
                     row.isChampion
                       ? 'bg-amber-400/25 text-amber-900 dark:text-amber-200'
                       : row.isActive

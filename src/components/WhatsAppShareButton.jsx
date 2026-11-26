@@ -30,8 +30,8 @@ export default function WhatsAppShareButton({
       <button
         type="button"
         onClick={handleWhatsApp}
-        className={`inline-flex items-center gap-1.5 rounded-xl bg-[#25D366] font-bold text-white shadow-2xs transition hover:bg-[#1ebe5a] ${
-          compact ? 'px-2.5 py-1.5 text-xs' : 'px-3 py-2 text-xs'
+        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#25D366] font-bold text-white shadow-2xs transition hover:bg-[#1ebe5a] ${
+          compact ? 'px-3 py-2 text-xs' : 'px-3.5 py-2 text-xs'
         }`}
       >
         <svg
@@ -49,16 +49,16 @@ export default function WhatsAppShareButton({
         onClick={handleCopy}
         title="Copiar resumen para pegar"
         aria-label="Copiar resumen para pegar"
-        className={`inline-flex items-center justify-center rounded-xl border transition ${
+        className={`inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border transition ${
           copied
-            ? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-        } ${compact ? 'p-1.5' : 'p-2'}`}
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/20 dark:text-emerald-300'
+            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+        } px-2.5 py-2`}
       >
         {copied ? (
-          <Check className="h-3.5 w-3.5" />
+          <Check className="h-4 w-4" />
         ) : (
-          <Copy className="h-3.5 w-3.5" />
+          <Copy className="h-4 w-4" />
         )}
       </button>
     </div>

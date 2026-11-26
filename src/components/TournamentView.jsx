@@ -18,6 +18,7 @@ import {
   Share2,
   Shield,
   ShieldCheck,
+  Sparkles,
   Swords,
   Table2,
   Trash2,
@@ -51,10 +52,12 @@ import PotSetsModal from './PotSetsModal';
 import TournamentMatchesTab from './TournamentMatchesTab';
 import TournamentStandingsTab from './TournamentStandingsTab';
 import TournamentStatsTab from './TournamentStatsTab';
+import TournamentSummaryTab from './TournamentSummaryTab';
 
 const TABS = [
   { id: 'standings', label: 'Tabla', icon: Table2 },
   { id: 'matches', label: 'Cruces / Jornadas', icon: Swords },
+  { id: 'summary', label: 'Resumen', icon: Sparkles },
   { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
 ];
 
@@ -398,7 +401,6 @@ export default function TournamentView({
     loadTournamentData();
   }, [loadTournamentData]);
 
-  // Sincronizar si el usuario actual actualiza su propio perfil/avatar desde Navbar
   useEffect(() => {
     if (!profile?.id) return;
     setParticipants((prev) =>
@@ -431,7 +433,6 @@ export default function TournamentView({
     );
   }, [profile]);
 
-  // Suscripción Realtime ligera para participantes, miembros e info del torneo
   useEffect(() => {
     if (!supabase || !tournamentId) return;
 
@@ -482,7 +483,6 @@ export default function TournamentView({
     };
   }, [tournamentId, refreshParticipantsAndMembers]);
 
-  // Enriquecer participantes con avatar efectivo (propio o heredado de profiles)
   const enrichedParticipants = useMemo(
     () =>
       participants.map((p) => ({
@@ -1739,6 +1739,21 @@ export default function TournamentView({
                       />
                     ))}
 
+                  {activeTab === 'summary' && (
+                    <TournamentSummaryTab
+                      tournament={tournament}
+                      participants={enrichedParticipants}
+                      matches={matches}
+                      eliminations={eliminations}
+                      customMatchdays={customMatchdays}
+                      subtournaments={subtournaments}
+                      subEntries={subEntries}
+                      subEntryMembers={subEntryMembers}
+                      subMatches={subMatches}
+                      currentUserId={user.id}
+                    />
+                  )}
+
                   {activeTab === 'stats' && (
                     <TournamentStatsTab
                       tournament={tournament}
@@ -2128,7 +2143,6 @@ export default function TournamentView({
               </ul>
             )}
 
-            {/* Espectadores / Miembros sin participante asignado */}
             {spectatorMembers.length > 0 && (
               <div className="mt-5 border-t border-slate-200/80 pt-4 dark:border-slate-800">
                 <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">

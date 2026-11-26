@@ -13,11 +13,13 @@ import {
   UserX,
   Users,
 } from 'lucide-react';
+import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
   computeLastStandingStandings,
   getKnockoutSeriesStatus,
   getSingleMatchWinner,
 } from '../utils/tournamentEngine';
+import Avatar from './Avatar';
 
 export default function TournamentMatchesTab({
   tournament,
@@ -69,12 +71,16 @@ export default function TournamentMatchesTab({
               className="podium-gold flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-5"
             >
               <div className="flex items-center gap-3.5">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-yellow-500 text-white shadow-md shadow-amber-500/25">
-                  <Crown className="h-6 w-6" />
-                </div>
+                <Avatar
+                  name={ls.champion.name}
+                  url={resolveParticipantAvatar(ls.champion)}
+                  size="lg"
+                  highlight
+                />
                 <div>
-                  <span className="text-xs font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
-                    ¡Tenemos Campeón!
+                  <span className="inline-flex items-center gap-1 text-xs font-extrabold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+                    <Crown className="h-3.5 w-3.5" />
+                    <span>¡Tenemos Campeón!</span>
                   </span>
                   <h3 className="text-xl font-black text-slate-900 dark:text-white">
                     {ls.champion.name}
@@ -100,7 +106,7 @@ export default function TournamentMatchesTab({
                   type="button"
                   disabled={mutatingElimination}
                   onClick={() => setConfirmResetEliminations(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-rose-600 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-rose-400"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white/80 px-3.5 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-rose-600 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-900/70 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-rose-400"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Reiniciar eliminaciones</span>
@@ -123,7 +129,7 @@ export default function TournamentMatchesTab({
                       setConfirmResetEliminations(false);
                       await onResetAllEliminations();
                     }}
-                    className="rounded-lg bg-rose-600 px-2.5 py-1 font-semibold text-white hover:bg-rose-700"
+                    className="min-h-[44px] rounded-lg bg-rose-600 px-3 py-1 font-semibold text-white hover:bg-rose-700"
                   >
                     Confirmar
                   </button>
@@ -131,7 +137,7 @@ export default function TournamentMatchesTab({
                     type="button"
                     disabled={mutatingElimination}
                     onClick={() => setConfirmResetEliminations(false)}
-                    className="rounded-lg bg-white px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                    className="min-h-[44px] rounded-lg bg-white px-3 py-1 font-semibold text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                   >
                     Cancelar
                   </button>
@@ -173,18 +179,19 @@ export default function TournamentMatchesTab({
                           stiffness: 380,
                           damping: 28,
                         }}
-                        className={`flex items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 ${
+                        className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 ${
                           isChamp
                             ? 'podium-gold'
                             : 'border-emerald-200/80 bg-white/90 dark:border-emerald-500/25 dark:bg-slate-900/85'
                         }`}
                       >
-                        <div className="flex min-w-0 items-center gap-2">
-                          {isChamp ? (
-                            <Crown className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-300" />
-                          ) : (
-                            <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500 shadow-xs shadow-emerald-500/50" />
-                          )}
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Avatar
+                            name={player.name}
+                            url={resolveParticipantAvatar(player)}
+                            size="sm"
+                            highlight={isChamp}
+                          />
                           <span className="truncate text-sm font-bold text-slate-900 dark:text-white">
                             {player.name}
                           </span>
@@ -198,11 +205,10 @@ export default function TournamentMatchesTab({
                         {isAdmin && canEliminateMore && (
                           <motion.button
                             type="button"
-                            whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.95 }}
                             disabled={mutatingElimination}
                             onClick={() => onEliminateParticipant(player.id)}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
+                            className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
                           >
                             <UserX className="h-3.5 w-3.5" />
                             <span>Eliminar</span>
@@ -246,12 +252,18 @@ export default function TournamentMatchesTab({
                           stiffness: 380,
                           damping: 28,
                         }}
-                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-900/85"
+                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2.5 dark:border-slate-800 dark:bg-slate-900/85"
                       >
                         <div className="flex min-w-0 items-center gap-2.5">
                           <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-extrabold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                             #{elim?.elimination_order}
                           </span>
+                          <Avatar
+                            name={player.name}
+                            url={resolveParticipantAvatar(player)}
+                            size="xs"
+                            className="opacity-70 grayscale"
+                          />
                           <span className="truncate text-sm font-medium text-slate-500 line-through dark:text-slate-400">
                             {player.name}
                           </span>
@@ -260,11 +272,10 @@ export default function TournamentMatchesTab({
                         {isAdmin && elim && (
                           <motion.button
                             type="button"
-                            whileHover={{ scale: 1.03 }}
                             whileTap={{ scale: 0.95 }}
                             disabled={mutatingElimination}
                             onClick={() => onRevertElimination(elim)}
-                            className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
+                            className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-white"
                           >
                             <RotateCcw className="h-3 w-3" />
                             <span>Revertir</span>
@@ -325,11 +336,10 @@ export default function TournamentMatchesTab({
         {isAdmin && (
           <motion.button
             type="button"
-            whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.96 }}
             disabled={!canGenerate || generating}
             onClick={onGenerateMatches}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {generating ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -343,7 +353,6 @@ export default function TournamentMatchesTab({
     );
   }
 
-  // Barra superior común (progreso + botón regenerar solo para admin)
   const regularMatches = matches.filter((m) => !m.is_bye);
   const completedRegularMatches = regularMatches.filter(
     (m) => m.status === 'completed'
@@ -393,7 +402,7 @@ export default function TournamentMatchesTab({
                 type="button"
                 disabled={generating || participants.length < 2}
                 onClick={() => setConfirmRegenerate(true)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
               >
                 <RefreshCw className="h-3.5 w-3.5" />
                 <span>Regenerar cruces</span>
@@ -413,7 +422,7 @@ export default function TournamentMatchesTab({
                   type="button"
                   disabled={generating}
                   onClick={handleConfirmGenerate}
-                  className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2.5 py-1 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-amber-600 px-3 py-1 font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
                 >
                   {generating && <Loader2 className="h-3 w-3 animate-spin" />}
                   <span>Sí, regenerar</span>
@@ -422,7 +431,7 @@ export default function TournamentMatchesTab({
                   type="button"
                   disabled={generating}
                   onClick={() => setConfirmRegenerate(false)}
-                  className="rounded-lg bg-white px-2.5 py-1 font-semibold text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="min-h-[44px] rounded-lg bg-white px-3 py-1 font-semibold text-slate-700 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Cancelar
                 </button>
@@ -485,7 +494,7 @@ export default function TournamentMatchesTab({
                 key={filterItem.id}
                 type="button"
                 onClick={() => setLeagueFilter(filterItem.id)}
-                className={`relative rounded-xl px-3.5 py-1.5 text-xs font-bold transition-colors ${
+                className={`relative min-h-[44px] rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${
                   active
                     ? 'text-white'
                     : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-200'
@@ -559,31 +568,38 @@ export default function TournamentMatchesTab({
                           {...(canEdit
                             ? {
                                 type: 'button',
-                                whileHover: { x: 2 },
                                 whileTap: { scale: 0.995 },
                                 onClick: () => onOpenMatchModal(m, null),
                               }
                             : {})}
-                          className={`flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                          className={`flex min-h-[52px] w-full items-center justify-between gap-2 px-3 py-3 text-left transition-colors sm:gap-3 sm:px-4 ${
                             canEdit
                               ? 'cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10'
                               : ''
                           }`}
                         >
-                          <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-3">
-                            <span
-                              className={`truncate text-right text-sm ${
-                                winnerId === m.participant_a_id
-                                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                  : isDraw
-                                  ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                  : 'font-medium text-slate-800 dark:text-slate-200'
-                              }`}
-                            >
-                              {pA?.name || 'Por definir'}
-                            </span>
+                          <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
+                            <div className="flex min-w-0 items-center justify-end gap-2">
+                              <span
+                                className={`truncate text-right text-xs sm:text-sm ${
+                                  winnerId === m.participant_a_id
+                                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                                    : isDraw
+                                    ? 'font-semibold text-slate-700 dark:text-slate-300'
+                                    : 'font-medium text-slate-800 dark:text-slate-200'
+                                }`}
+                              >
+                                {pA?.name || 'Por definir'}
+                              </span>
+                              <Avatar
+                                name={pA?.name || '?'}
+                                url={resolveParticipantAvatar(pA)}
+                                size="xs"
+                                className="hidden sm:inline-flex"
+                              />
+                            </div>
 
-                            <div className="flex min-w-[78px] justify-center">
+                            <div className="flex min-w-[68px] justify-center sm:min-w-[78px]">
                               {!isCompleted ? (
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
                                   <Clock className="h-3 w-3" />
@@ -606,21 +622,29 @@ export default function TournamentMatchesTab({
                               )}
                             </div>
 
-                            <span
-                              className={`truncate text-left text-sm ${
-                                winnerId === m.participant_b_id
-                                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                  : isDraw
-                                  ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                  : 'font-medium text-slate-800 dark:text-slate-200'
-                              }`}
-                            >
-                              {pB?.name || 'Por definir'}
-                            </span>
+                            <div className="flex min-w-0 items-center justify-start gap-2">
+                              <Avatar
+                                name={pB?.name || '?'}
+                                url={resolveParticipantAvatar(pB)}
+                                size="xs"
+                                className="hidden sm:inline-flex"
+                              />
+                              <span
+                                className={`truncate text-left text-xs sm:text-sm ${
+                                  winnerId === m.participant_b_id
+                                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                                    : isDraw
+                                    ? 'font-semibold text-slate-700 dark:text-slate-300'
+                                    : 'font-medium text-slate-800 dark:text-slate-200'
+                                }`}
+                              >
+                                {pB?.name || 'Por definir'}
+                              </span>
+                            </div>
                           </div>
 
                           {canEdit && (
-                            <span className="shrink-0 rounded-lg p-1 text-slate-400 transition-colors group-hover:text-emerald-600">
+                            <span className="shrink-0 rounded-lg p-1 text-slate-400">
                               <Pencil className="h-3.5 w-3.5" />
                             </span>
                           )}
@@ -630,11 +654,16 @@ export default function TournamentMatchesTab({
                   </div>
 
                   {byePlayer && (
-                    <div className="border-t border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
+                    <div className="flex items-center gap-2 border-t border-slate-100 bg-slate-50/80 px-4 py-2 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
                       <span className="font-semibold text-slate-700 dark:text-slate-200">
                         Fecha libre:
-                      </span>{' '}
-                      {byePlayer.name}
+                      </span>
+                      <Avatar
+                        name={byePlayer.name}
+                        url={resolveParticipantAvatar(byePlayer)}
+                        size="xs"
+                      />
+                      <span>{byePlayer.name}</span>
                     </div>
                   )}
                 </motion.div>
@@ -724,9 +753,16 @@ export default function TournamentMatchesTab({
                           Pase libre (BYE)
                         </span>
                       </div>
-                      <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                        {player1?.name || 'Jugador'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <Avatar
+                          name={player1?.name || 'Jugador'}
+                          url={resolveParticipantAvatar(player1)}
+                          size="xs"
+                        />
+                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                          {player1?.name || 'Jugador'}
+                        </p>
+                      </div>
                       <p className="mt-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
                         Avanza automáticamente
                       </p>
@@ -750,12 +786,11 @@ export default function TournamentMatchesTab({
                       {...(canEdit
                         ? {
                             type: 'button',
-                            whileHover: { y: -2 },
                             whileTap: { scale: 0.985 },
                             onClick: () => onOpenMatchModal(leg1, null),
                           }
                         : {})}
-                      className={`w-full rounded-2xl border bg-white/85 p-3 text-left backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
+                      className={`min-h-[44px] w-full rounded-2xl border bg-white/85 p-3 text-left backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
                         series.isCompleted
                           ? 'border-emerald-300/80 dark:border-emerald-500/35'
                           : 'border-slate-200/80 dark:border-slate-800'
@@ -772,15 +807,22 @@ export default function TournamentMatchesTab({
 
                       <div className="space-y-1.5">
                         <div
-                          className={`flex items-center justify-between rounded-xl px-2.5 py-1.5 text-sm ${
+                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
                             series.winnerId === leg1.participant_a_id
                               ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
                               : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
                           }`}
                         >
-                          <span className="truncate">
-                            {player1?.name || 'Por definir'}
-                          </span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Avatar
+                              name={player1?.name || '?'}
+                              url={resolveParticipantAvatar(player1)}
+                              size="xs"
+                            />
+                            <span className="truncate">
+                              {player1?.name || 'Por definir'}
+                            </span>
+                          </div>
                           <span className="ml-2 font-mono text-xs font-bold">
                             {hasScores
                               ? leg1.score_a
@@ -791,15 +833,22 @@ export default function TournamentMatchesTab({
                         </div>
 
                         <div
-                          className={`flex items-center justify-between rounded-xl px-2.5 py-1.5 text-sm ${
+                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
                             series.winnerId === leg1.participant_b_id
                               ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
                               : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
                           }`}
                         >
-                          <span className="truncate">
-                            {player2?.name || 'Por definir'}
-                          </span>
+                          <div className="flex min-w-0 items-center gap-2">
+                            <Avatar
+                              name={player2?.name || '?'}
+                              url={resolveParticipantAvatar(player2)}
+                              size="xs"
+                            />
+                            <span className="truncate">
+                              {player2?.name || 'Por definir'}
+                            </span>
+                          </div>
                           <span className="ml-2 font-mono text-xs font-bold">
                             {hasScores
                               ? leg1.score_b
@@ -845,15 +894,22 @@ export default function TournamentMatchesTab({
 
                     <div className="mb-2.5 space-y-1">
                       <div
-                        className={`flex items-center justify-between rounded-xl px-2.5 py-1 text-xs ${
+                        className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
                           series.winnerId === series.player1Id
                             ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
                             : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
                         }`}
                       >
-                        <span className="truncate">
-                          {player1?.name || 'Por definir'}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <Avatar
+                            name={player1?.name || '?'}
+                            url={resolveParticipantAvatar(player1)}
+                            size="xs"
+                          />
+                          <span className="truncate">
+                            {player1?.name || 'Por definir'}
+                          </span>
+                        </div>
                         {series.winnerId === series.player1Id && (
                           <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
                             Avanza
@@ -862,15 +918,22 @@ export default function TournamentMatchesTab({
                       </div>
 
                       <div
-                        className={`flex items-center justify-between rounded-xl px-2.5 py-1 text-xs ${
+                        className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
                           series.winnerId === series.player2Id
                             ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
                             : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
                         }`}
                       >
-                        <span className="truncate">
-                          {player2?.name || 'Por definir'}
-                        </span>
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <Avatar
+                            name={player2?.name || '?'}
+                            url={resolveParticipantAvatar(player2)}
+                            size="xs"
+                          />
+                          <span className="truncate">
+                            {player2?.name || 'Por definir'}
+                          </span>
+                        </div>
                         {series.winnerId === series.player2Id && (
                           <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
                             Avanza
@@ -894,13 +957,12 @@ export default function TournamentMatchesTab({
                             {...(canEditLeg
                               ? {
                                   type: 'button',
-                                  whileHover: { x: 2 },
                                   whileTap: { scale: 0.985 },
                                   onClick: () =>
                                     onOpenMatchModal(legMatch, sibling),
                                 }
                               : {})}
-                            className={`flex w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-2.5 py-1.5 text-[11px] transition-colors dark:border-slate-800 dark:bg-slate-950/50 ${
+                            className={`flex min-h-[44px] w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-2.5 py-1.5 text-[11px] transition-colors dark:border-slate-800 dark:bg-slate-950/50 ${
                               canEditLeg
                                 ? 'cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10'
                                 : ''
@@ -954,10 +1016,9 @@ export default function TournamentMatchesTab({
               thirdPlaceMatch.participant_b_id && (
                 <motion.button
                   type="button"
-                  whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={() => onOpenMatchModal(thirdPlaceMatch, null)}
-                  className="inline-flex items-center gap-1 rounded-lg border border-orange-300/80 bg-white/90 px-2.5 py-1 text-xs font-semibold text-orange-800 transition hover:bg-orange-100/70 dark:border-orange-500/35 dark:bg-slate-900/90 dark:text-orange-200 dark:hover:bg-orange-500/20"
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-orange-300/80 bg-white/90 px-3 py-1.5 text-xs font-semibold text-orange-800 transition hover:bg-orange-100/70 dark:border-orange-500/35 dark:bg-slate-900/90 dark:text-orange-200 dark:hover:bg-orange-500/20"
                 >
                   <Pencil className="h-3 w-3" />
                   <span>
@@ -970,17 +1031,29 @@ export default function TournamentMatchesTab({
           </div>
 
           <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-orange-200/80 bg-white/90 px-4 py-3 text-sm dark:border-orange-500/25 dark:bg-slate-900/85">
-            <span
-              className={`truncate text-right ${
-                getSingleMatchWinner(thirdPlaceMatch) ===
-                thirdPlaceMatch.participant_a_id
-                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                  : 'font-semibold text-slate-800 dark:text-slate-200'
-              }`}
-            >
-              {participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
-                'Perdedor Semifinal 1'}
-            </span>
+            <div className="flex min-w-0 items-center justify-end gap-2">
+              <span
+                className={`truncate text-right ${
+                  getSingleMatchWinner(thirdPlaceMatch) ===
+                  thirdPlaceMatch.participant_a_id
+                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                    : 'font-semibold text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                {participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
+                  'Perdedor Semifinal 1'}
+              </span>
+              <Avatar
+                name={
+                  participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
+                  '?'
+                }
+                url={resolveParticipantAvatar(
+                  participantMap.get(thirdPlaceMatch.participant_a_id)
+                )}
+                size="xs"
+              />
+            </div>
 
             <span className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-800 dark:bg-slate-800 dark:text-slate-100">
               {thirdPlaceMatch.status === 'completed'
@@ -991,17 +1064,29 @@ export default function TournamentMatchesTab({
                 : 'vs'}
             </span>
 
-            <span
-              className={`truncate text-left ${
-                getSingleMatchWinner(thirdPlaceMatch) ===
-                thirdPlaceMatch.participant_b_id
-                  ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                  : 'font-semibold text-slate-800 dark:text-slate-200'
-              }`}
-            >
-              {participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
-                'Perdedor Semifinal 2'}
-            </span>
+            <div className="flex min-w-0 items-center justify-start gap-2">
+              <Avatar
+                name={
+                  participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
+                  '?'
+                }
+                url={resolveParticipantAvatar(
+                  participantMap.get(thirdPlaceMatch.participant_b_id)
+                )}
+                size="xs"
+              />
+              <span
+                className={`truncate text-left ${
+                  getSingleMatchWinner(thirdPlaceMatch) ===
+                  thirdPlaceMatch.participant_b_id
+                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                    : 'font-semibold text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                {participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
+                  'Perdedor Semifinal 2'}
+              </span>
+            </div>
           </div>
         </motion.div>
       )}

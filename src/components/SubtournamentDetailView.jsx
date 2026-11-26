@@ -13,6 +13,7 @@ import {
   Users,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
   adaptEntriesToParticipants,
   adaptSubEliminationsToEliminations,
@@ -23,6 +24,7 @@ import {
 } from '../utils/customTournamentEngine';
 import { getKnockoutSeriesStatus } from '../utils/tournamentEngine';
 import { buildSubtournamentWhatsAppText } from '../utils/whatsappShare';
+import Avatar from './Avatar';
 import FinalizeSubtournamentModal from './FinalizeSubtournamentModal';
 import MatchResultModal from './MatchResultModal';
 import TournamentMatchesTab from './TournamentMatchesTab';
@@ -78,16 +80,39 @@ export default function SubtournamentDetailView({
     ? subtournament.points_scale
     : [];
 
-  const adaptedEntries = useMemo(
-    () =>
-      adaptEntriesToParticipants(
-        entries,
-        entryMembers,
-        currentUserId,
-        participantMap
-      ),
-    [entries, entryMembers, currentUserId, participantMap]
-  );
+  const adaptedEntries = useMemo(() => {
+    const base = adaptEntriesToParticipants(
+      entries,
+      entryMembers,
+      currentUserId,
+      participantMap
+    );
+
+    const membersMap = new Map();
+    entryMembers.forEach((em) => {
+      if (!membersMap.has(em.entry_id)) membersMap.set(em.entry_id, []);
+      membersMap.get(em.entry_id).push(em.participant_id);
+    });
+
+    const entryById = new Map(entries.map((e) => [e.id, e]));
+
+    return base.map((item) => {
+      const mIds = membersMap.get(item.id) || [];
+      const singleId =
+        mIds.length === 1
+          ? mIds[0]
+          : mIds.length === 0
+          ? entryById.get(item.id)?.participant_id
+          : null;
+      const p = singleId ? participantMap.get(singleId) : null;
+      return {
+        ...item,
+        effective_avatar_url: p ? resolveParticipantAvatar(p) : null,
+        avatar_url: p?.avatar_url || null,
+        profile: p?.profile || null,
+      };
+    });
+  }, [entries, entryMembers, currentUserId, participantMap]);
 
   const entryMap = useMemo(
     () => new Map(adaptedEntries.map((e) => [e.id, e])),
@@ -482,7 +507,7 @@ export default function SubtournamentDetailView({
         <button
           type="button"
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           <span>Volver a {matchday?.name || 'las Jornadas'}</span>
@@ -512,7 +537,7 @@ export default function SubtournamentDetailView({
                 <button
                   type="button"
                   onClick={() => setIsFinalizeModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700"
                 >
                   <Award className="h-4 w-4" />
                   <span>Finalizar Subtorneo y Repartir Puntos</span>
@@ -522,7 +547,7 @@ export default function SubtournamentDetailView({
                   <button
                     type="button"
                     onClick={() => setIsFinalizeModalOpen(true)}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
+                    className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-800 transition hover:bg-emerald-100"
                   >
                     <Pencil className="h-3.5 w-3.5" />
                     <span>Editar puestos / puntos</span>
@@ -531,7 +556,7 @@ export default function SubtournamentDetailView({
                     type="button"
                     disabled={reopening}
                     onClick={handleReopenSubtournament}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
+                    className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100 disabled:opacity-60"
                   >
                     {reopening ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -547,7 +572,7 @@ export default function SubtournamentDetailView({
                 <button
                   type="button"
                   onClick={() => setConfirmDelete(true)}
-                  className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-xs font-semibold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50"
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                   <span>Eliminar</span>
@@ -559,7 +584,7 @@ export default function SubtournamentDetailView({
                     type="button"
                     disabled={deleting}
                     onClick={handleDeleteSubtournament}
-                    className="rounded bg-rose-600 px-2 py-0.5 font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                    className="min-h-[44px] rounded bg-rose-600 px-3 py-1 font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
                   >
                     {deleting ? '...' : 'Sí'}
                   </button>
@@ -567,7 +592,7 @@ export default function SubtournamentDetailView({
                     type="button"
                     disabled={deleting}
                     onClick={() => setConfirmDelete(false)}
-                    className="rounded bg-white px-2 py-0.5 font-semibold text-slate-600 hover:bg-slate-100"
+                    className="min-h-[44px] rounded bg-white px-3 py-1 font-semibold text-slate-600 hover:bg-slate-100"
                   >
                     No
                   </button>
@@ -585,7 +610,7 @@ export default function SubtournamentDetailView({
       )}
 
       {/* Tarjeta resumen del Subtorneo */}
-      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/55">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
@@ -594,7 +619,7 @@ export default function SubtournamentDetailView({
               >
                 {formatMeta.label}
               </span>
-              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700">
+              <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <Users className="h-3 w-3 text-slate-400" />
                 <span>
                   {isTeamBased
@@ -619,7 +644,7 @@ export default function SubtournamentDetailView({
                 )}
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-slate-900">
+            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
               {subtournament.name}
             </h2>
           </div>
@@ -629,13 +654,17 @@ export default function SubtournamentDetailView({
               {pointsScale.slice(0, 5).map((pts, idx) => (
                 <span
                   key={idx}
-                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700"
+                  className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
                 >
-                  {idx + 1}.º: <strong className="text-emerald-700">{pts}</strong> pts
+                  {idx + 1}.º:{' '}
+                  <strong className="text-emerald-700 dark:text-emerald-400">
+                    {pts}
+                  </strong>{' '}
+                  pts
                 </span>
               ))}
               {pointsScale.length > 5 && (
-                <span className="rounded-lg bg-slate-200/70 px-2 py-1 text-[11px] font-medium text-slate-600">
+                <span className="rounded-lg bg-slate-200/70 px-2 py-1 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                   +{pointsScale.length - 5} puestos
                 </span>
               )}
@@ -650,10 +679,12 @@ export default function SubtournamentDetailView({
               return (
                 <div
                   key={entry.id}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs"
+                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/70"
                 >
-                  <p className="font-bold text-slate-900">{entry.entry_name}</p>
-                  <p className="mt-0.5 text-slate-500">
+                  <p className="font-bold text-slate-900 dark:text-white">
+                    {entry.entry_name}
+                  </p>
+                  <p className="mt-0.5 text-slate-500 dark:text-slate-400">
                     {members.length > 0 ? members.join(', ') : 'Sin integrantes'}
                   </p>
                 </div>
@@ -665,33 +696,39 @@ export default function SubtournamentDetailView({
 
       {/* Resultado oficial si ya está finalizado */}
       {isCompleted && (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4">
-          <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-900">
-            <Award className="h-4 w-4 text-emerald-600" />
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-500/35 dark:bg-emerald-500/10">
+          <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
+            <Award className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
             <span>Posiciones finales y puntos repartidos</span>
           </h3>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {finalizedEntries.map((entry) => {
               const members = membersByEntryId.get(entry.id) || [];
+              const adapted = entryMap.get(entry.id);
               return (
                 <div
                   key={entry.id}
-                  className="flex items-center justify-between rounded-xl border border-emerald-200/80 bg-white px-3.5 py-2.5"
+                  className="flex items-center justify-between rounded-xl border border-emerald-200/80 bg-white px-3.5 py-2.5 dark:border-emerald-500/30 dark:bg-slate-900/80"
                 >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-extrabold text-emerald-800">
-                        {entry.final_rank ?? '-'}°
-                      </span>
-                      <span className="truncate text-sm font-bold text-slate-900">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-xs font-extrabold text-emerald-800">
+                      {entry.final_rank ?? '-'}°
+                    </span>
+                    <Avatar
+                      name={entry.entry_name}
+                      url={adapted?.effective_avatar_url || null}
+                      size="xs"
+                    />
+                    <div className="min-w-0">
+                      <span className="block truncate text-sm font-bold text-slate-900 dark:text-white">
                         {entry.entry_name}
                       </span>
+                      {isTeamBased && members.length > 0 && (
+                        <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                          {members.join(', ')}
+                        </p>
+                      )}
                     </div>
-                    {isTeamBased && members.length > 0 && (
-                      <p className="mt-0.5 truncate pl-8 text-[11px] text-slate-500">
-                        {members.join(', ')}
-                      </p>
-                    )}
                   </div>
                   <span className="ml-2 shrink-0 rounded-full bg-emerald-600 px-2.5 py-0.5 text-xs font-bold text-white">
                     +{entry.points_awarded} pts
@@ -705,14 +742,14 @@ export default function SubtournamentDetailView({
 
       {/* Contenido interno del Subtorneo */}
       {subtournament.format === 'manual' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div>
-              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
                 <ListOrdered className="h-4 w-4 text-indigo-600" />
                 <span>Posiciones manuales</span>
               </h3>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-slate-500 dark:text-slate-400">
                 {canEdit
                   ? 'Asigna el puesto de cada competidor y luego presiona "Finalizar Subtorneo y Repartir Puntos".'
                   : 'Las posiciones serán confirmadas al finalizar el subtorneo.'}
@@ -729,17 +766,24 @@ export default function SubtournamentDetailView({
               return (
                 <div
                   key={entry.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-bold text-slate-900">
-                      {entry.name}
-                    </p>
-                    {isTeamBased && members.length > 0 && (
-                      <p className="text-[11px] text-slate-500">
-                        {members.join(', ')}
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar
+                      name={entry.name}
+                      url={entry.effective_avatar_url}
+                      size="sm"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                        {entry.name}
                       </p>
-                    )}
+                      {isTeamBased && members.length > 0 && (
+                        <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                          {members.join(', ')}
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {canEdit ? (
@@ -753,7 +797,7 @@ export default function SubtournamentDetailView({
                             [entry.id]: nextRank,
                           }));
                         }}
-                        className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                        className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
                       >
                         {entries.map((_, idx) => (
                           <option key={idx + 1} value={idx + 1}>
@@ -761,12 +805,12 @@ export default function SubtournamentDetailView({
                           </option>
                         ))}
                       </select>
-                      <span className="min-w-[60px] text-right text-xs font-bold text-emerald-700">
+                      <span className="min-w-[60px] text-right text-xs font-bold text-emerald-700 dark:text-emerald-400">
                         {previewPts} pts
                       </span>
                     </div>
                   ) : (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                       {isCompleted
                         ? `${entry.final_rank}.º · +${entry.points_awarded} pts`
                         : 'En juego'}
@@ -778,15 +822,15 @@ export default function SubtournamentDetailView({
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white">
-          <div className="flex border-b border-slate-200 px-2 pt-1">
+        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="flex border-b border-slate-200 px-2 pt-1 dark:border-slate-800">
             <button
               type="button"
               onClick={() => setInnerTab('matches')}
-              className={`inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
                 innerTab === 'matches'
-                  ? 'border-emerald-600 text-emerald-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
               }`}
             >
               <Swords className="h-4 w-4" />
@@ -800,10 +844,10 @@ export default function SubtournamentDetailView({
             <button
               type="button"
               onClick={() => setInnerTab('standings')}
-              className={`inline-flex items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+              className={`inline-flex min-h-[44px] items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
                 innerTab === 'standings'
-                  ? 'border-emerald-600 text-emerald-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-800'
+                  ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
               }`}
             >
               <Table2 className="h-4 w-4" />

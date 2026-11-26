@@ -14,10 +14,10 @@ import {
   Swords,
   TrendingUp,
   Trophy,
-  User,
   Users,
   Zap,
 } from 'lucide-react';
+import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import { getSubtournamentFormatMeta } from '../utils/customTournamentEngine';
 import {
   computeCustomPairStats,
@@ -26,14 +26,15 @@ import {
   computeMatchBasedStats,
   computeMatchH2H,
 } from '../utils/tournamentStatsEngine';
+import Avatar from './Avatar';
 
 function FormBadge({ item }) {
   const styles =
     item.outcome === 'W'
-      ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+      ? 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-500/20 dark:text-emerald-300 dark:border-emerald-500/35'
       : item.outcome === 'D'
-      ? 'bg-amber-100 text-amber-800 border-amber-200'
-      : 'bg-rose-100 text-rose-700 border-rose-200';
+      ? 'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/35'
+      : 'bg-rose-100 text-rose-700 border-rose-200 dark:bg-rose-500/20 dark:text-rose-300 dark:border-rose-500/35';
 
   const letter = item.outcome === 'W' ? 'G' : item.outcome === 'D' ? 'E' : 'P';
 
@@ -49,9 +50,9 @@ function FormBadge({ item }) {
 
 function KpiCard({ icon: Icon, iconBg, label, value, subtext }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs">
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-2xs dark:border-slate-800 dark:bg-slate-900/70">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
           {label}
         </span>
         <div
@@ -60,31 +61,53 @@ function KpiCard({ icon: Icon, iconBg, label, value, subtext }) {
           <Icon className="h-4 w-4" />
         </div>
       </div>
-      <p className="mt-2 text-2xl font-extrabold tracking-tight text-slate-900">
+      <p className="mt-2 truncate text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
         {value}
       </p>
-      {subtext && <p className="mt-0.5 text-xs text-slate-500">{subtext}</p>}
+      {subtext && (
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+          {subtext}
+        </p>
+      )}
     </div>
   );
 }
 
-function HighlightCard({ icon: Icon, iconClass, title, primary, secondary }) {
+function HighlightCard({
+  icon: Icon,
+  iconClass,
+  title,
+  primary,
+  secondary,
+  participant = null,
+}) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
-      <div
-        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-2xs ${iconClass}`}
-      >
-        <Icon className="h-5 w-5" />
-      </div>
+    <div className="flex items-start gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-900/55">
+      {participant ? (
+        <Avatar
+          name={participant.name}
+          url={resolveParticipantAvatar(participant)}
+          size="md"
+        />
+      ) : (
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white shadow-2xs dark:border-slate-700 dark:bg-slate-800 ${iconClass}`}
+        >
+          <Icon className="h-5 w-5" />
+        </div>
+      )}
       <div className="min-w-0">
-        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-          {title}
+        <p className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+          {participant && <Icon className={`h-3.5 w-3.5 ${iconClass}`} />}
+          <span>{title}</span>
         </p>
-        <p className="mt-0.5 truncate text-sm font-extrabold text-slate-900">
+        <p className="mt-0.5 truncate text-sm font-extrabold text-slate-900 dark:text-white">
           {primary}
         </p>
         {secondary && (
-          <p className="mt-0.5 text-xs text-slate-600">{secondary}</p>
+          <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+            {secondary}
+          </p>
         )}
       </div>
     </div>
@@ -149,12 +172,12 @@ export default function TournamentStatsTab({
 
   if (participants.length === 0) {
     return (
-      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center">
+      <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900/40">
         <BarChart3 className="mx-auto mb-3 h-8 w-8 text-slate-400" />
-        <h3 className="text-sm font-bold text-slate-800">
+        <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
           Sin datos estadísticos todavía
         </h3>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
           Agrega participantes al torneo para comenzar a registrar estadísticas.
         </p>
       </div>
@@ -240,7 +263,6 @@ function MatchBasedStatsView({
 
   return (
     <div className="space-y-6">
-      {/* KPIs Globales */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
           icon={CheckCircle2}
@@ -290,10 +312,9 @@ function MatchBasedStatsView({
         />
       </div>
 
-      {/* Récords y Líderes */}
       {stats.completedCount > 0 ? (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
             <Award className="h-4 w-4 text-amber-500" />
             <span>Récords y líderes del torneo</span>
           </h3>
@@ -303,6 +324,7 @@ function MatchBasedStatsView({
                 icon={Zap}
                 iconClass="text-emerald-600"
                 title="Mejor ataque"
+                participant={stats.bestAttack.participant}
                 primary={stats.bestAttack.participant.name}
                 secondary={`${stats.bestAttack.gf} a favor (${stats.bestAttack.avgGf} por partido)`}
               />
@@ -313,6 +335,7 @@ function MatchBasedStatsView({
                 icon={ShieldCheck}
                 iconClass="text-sky-600"
                 title="Mejor defensa"
+                participant={stats.bestDefense.participant}
                 primary={stats.bestDefense.participant.name}
                 secondary={`${stats.bestDefense.gc} en contra (${stats.bestDefense.avgGc} por partido)`}
               />
@@ -323,6 +346,7 @@ function MatchBasedStatsView({
                 icon={Flame}
                 iconClass="text-orange-600"
                 title="Mejor racha ganadora"
+                participant={stats.bestWinStreakLeader.participant}
                 primary={stats.bestWinStreakLeader.participant.name}
                 secondary={`${stats.bestWinStreakLeader.bestWinStreak} ${
                   stats.bestWinStreakLeader.bestWinStreak === 1
@@ -357,6 +381,7 @@ function MatchBasedStatsView({
                 icon={Medal}
                 iconClass="text-teal-600"
                 title="Más vallas invictas"
+                participant={stats.mostCleanSheetsLeader.participant}
                 primary={stats.mostCleanSheetsLeader.participant.name}
                 secondary={`${stats.mostCleanSheetsLeader.cleanSheets} ${
                   stats.mostCleanSheetsLeader.cleanSheets === 1
@@ -368,20 +393,19 @@ function MatchBasedStatsView({
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
           Carga el resultado de al menos un partido en{' '}
           <strong>Cruces / Jornadas</strong> para desbloquear los récords y
           estadísticas avanzadas.
         </div>
       )}
 
-      {/* Gráfico comparativo de eficacia */}
       {stats.completedCount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <h3 className="mb-1 text-sm font-bold text-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+          <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
             Efectividad por participante
           </h3>
-          <p className="mb-4 text-xs text-slate-500">
+          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
             Porcentaje de puntos obtenidos sobre el máximo posible en partidos
             jugados.
           </p>
@@ -390,10 +414,16 @@ function MatchBasedStatsView({
             {stats.orderedPlayerStats.map((st) => {
               const isMine = st.participant.user_id === currentUserId;
               return (
-                <div key={st.participant.id} className="space-y-1">
+                <div key={st.participant.id} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800">
+                      <Avatar
+                        name={st.participant.name}
+                        url={resolveParticipantAvatar(st.participant)}
+                        size="xs"
+                        highlight={isMine}
+                      />
+                      <span className="font-bold text-slate-800 dark:text-slate-100">
                         {st.participant.name}
                       </span>
                       {isMine && (
@@ -402,19 +432,19 @@ function MatchBasedStatsView({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-slate-600">
+                    <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
                       <span className="hidden text-[11px] sm:inline">
                         {st.pg}G · {st.pe}E · {st.pp}P
                       </span>
-                      <span className="font-extrabold text-slate-900">
+                      <span className="font-extrabold text-slate-900 dark:text-white">
                         {st.pj > 0 ? `${st.effectivenessPct}%` : '—'}
                       </span>
                     </div>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
                       className={`h-full rounded-full transition-all ${
-                        isMine ? 'bg-emerald-600' : 'bg-slate-800'
+                        isMine ? 'bg-emerald-600' : 'bg-slate-800 dark:bg-indigo-500'
                       }`}
                       style={{ width: `${st.effectivenessPct}%` }}
                     />
@@ -426,13 +456,16 @@ function MatchBasedStatsView({
         </div>
       )}
 
-      {/* Ficha individual del jugador */}
       {selectedStats && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <Avatar
+                name={selectedStats.participant.name}
+                url={resolveParticipantAvatar(selectedStats.participant)}
+                size="sm"
+              />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Ficha individual del jugador
               </h3>
             </div>
@@ -440,7 +473,7 @@ function MatchBasedStatsView({
             <select
               value={selectedStats.participant.id}
               onChange={(e) => onSelectPlayer(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {participants.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -451,60 +484,60 @@ function MatchBasedStatsView({
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 % Victorias
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.pj > 0 ? `${selectedStats.winRate}%` : '—'}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {selectedStats.pg} de {selectedStats.pj} partidos
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Prom. GF / GC
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.avgGf !== null
                   ? `${selectedStats.avgGf} / ${selectedStats.avgGc}`
                   : '—'}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {selectedStats.gf} GF · {selectedStats.gc} GC
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Racha invicto máx.
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.bestUnbeatenStreak}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Actual: {selectedStats.currentUnbeatenStreak}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Arcos en cero
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.cleanSheets}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Mejor racha G: {selectedStats.bestWinStreak}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3">
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/40">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Últimos partidos
               </p>
               {selectedStats.recentForm.length > 0 ? (
@@ -522,7 +555,7 @@ function MatchBasedStatsView({
 
             <div className="space-y-1 text-xs">
               {selectedStats.bestWin && (
-                <p className="text-emerald-800">
+                <p className="text-emerald-800 dark:text-emerald-300">
                   <strong>Mejor victoria:</strong> {selectedStats.bestWin.forScore}-
                   {selectedStats.bestWin.againstScore} vs{' '}
                   {selectedStats.bestWin.opponentName} (
@@ -530,7 +563,7 @@ function MatchBasedStatsView({
                 </p>
               )}
               {selectedStats.worstLoss && (
-                <p className="text-rose-700">
+                <p className="text-rose-700 dark:text-rose-300">
                   <strong>Peor derrota:</strong> {selectedStats.worstLoss.forScore}-
                   {selectedStats.worstLoss.againstScore} vs{' '}
                   {selectedStats.worstLoss.opponentName} (
@@ -542,13 +575,12 @@ function MatchBasedStatsView({
         </div>
       )}
 
-      {/* Comparador Cara a Cara */}
       {participants.length >= 2 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Swords className="h-4 w-4 text-amber-600" />
-              <h3 className="text-sm font-bold text-slate-900">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Cara a Cara (Historial directo)
               </h3>
             </div>
@@ -557,7 +589,7 @@ function MatchBasedStatsView({
               <select
                 value={h2hPlayerAId}
                 onChange={(e) => onSelectH2HA(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {participants.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -571,7 +603,7 @@ function MatchBasedStatsView({
               <select
                 value={h2hPlayerBId}
                 onChange={(e) => onSelectH2HB(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {participants.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -583,61 +615,77 @@ function MatchBasedStatsView({
           </div>
 
           {h2hPlayerAId === h2hPlayerBId ? (
-            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
               Selecciona dos jugadores distintos para comparar su historial.
             </p>
           ) : !h2h || h2h.totalPlayed === 0 ? (
-            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
               {participantMap.get(h2hPlayerAId)?.name} y{' '}
               {participantMap.get(h2hPlayerBId)?.name} todavía no tienen partidos
               completados entre sí en este torneo.
             </p>
           ) : (
             <div className="space-y-4">
-              <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-center">
-                <div>
-                  <p className="truncate text-xs font-bold text-slate-700">
+              <div className="grid grid-cols-3 items-center gap-2 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-center dark:border-slate-800 dark:bg-slate-950/40">
+                <div className="flex flex-col items-center gap-1">
+                  <Avatar
+                    name={h2h.playerA?.name}
+                    url={resolveParticipantAvatar(h2h.playerA)}
+                    size="sm"
+                  />
+                  <p className="max-w-full truncate text-xs font-bold text-slate-700 dark:text-slate-200">
                     {h2h.playerA?.name}
                   </p>
-                  <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+                  <p className="text-2xl font-extrabold text-emerald-700 dark:text-emerald-400">
                     {h2h.winsA}
                   </p>
-                  <p className="text-[11px] text-slate-500">Victorias</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Victorias
+                  </p>
                 </div>
 
                 <div>
-                  <p className="text-xs font-bold text-slate-500">Empates</p>
-                  <p className="mt-1 text-2xl font-extrabold text-slate-700">
+                  <p className="text-xs font-bold text-slate-500 dark:text-slate-400">
+                    Empates
+                  </p>
+                  <p className="mt-1 text-2xl font-extrabold text-slate-700 dark:text-slate-200">
                     {h2h.draws}
                   </p>
                   {h2h.hasAnyScore && (
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
                       Goles: {h2h.goalsA} - {h2h.goalsB}
                     </p>
                   )}
                 </div>
 
-                <div>
-                  <p className="truncate text-xs font-bold text-slate-700">
+                <div className="flex flex-col items-center gap-1">
+                  <Avatar
+                    name={h2h.playerB?.name}
+                    url={resolveParticipantAvatar(h2h.playerB)}
+                    size="sm"
+                  />
+                  <p className="max-w-full truncate text-xs font-bold text-slate-700 dark:text-slate-200">
                     {h2h.playerB?.name}
                   </p>
-                  <p className="mt-1 text-2xl font-extrabold text-sky-700">
+                  <p className="text-2xl font-extrabold text-sky-700 dark:text-sky-400">
                     {h2h.winsB}
                   </p>
-                  <p className="text-[11px] text-slate-500">Victorias</p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Victorias
+                  </p>
                 </div>
               </div>
 
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                 {h2h.history.map((item) => (
                   <div
                     key={item.id}
                     className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
                   >
-                    <span className="font-semibold text-slate-500">
+                    <span className="font-semibold text-slate-500 dark:text-slate-400">
                       {item.roundName}
                     </span>
-                    <span className="font-bold text-slate-900">
+                    <span className="font-bold text-slate-900 dark:text-slate-100">
                       {item.hasScores
                         ? `${h2h.playerA?.name} ${item.scoreForA} - ${item.scoreForB} ${h2h.playerB?.name}`
                         : item.winnerSide === 'draw'
@@ -713,6 +761,7 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
               icon={Zap}
               iconClass="text-rose-600"
               title="Primer eliminado"
+              participant={lsStats.firstEliminated}
               primary={lsStats.firstEliminated.name}
               secondary="Baja #1 de la competencia"
             />
@@ -723,6 +772,7 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
               icon={Medal}
               iconClass="text-amber-600"
               title="Último eliminado"
+              participant={lsStats.lastEliminated}
               primary={lsStats.lastEliminated.name}
               secondary={`Cayó en el orden #${lsStats.eliminatedCount}`}
             />
@@ -730,12 +780,11 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
         </div>
       )}
 
-      {/* Gráfico de supervivencia */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-        <h3 className="mb-1 text-sm font-bold text-slate-900">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+        <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
           Índice de resistencia
         </h3>
-        <p className="mb-4 text-xs text-slate-500">
+        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
           Comparativa visual según el orden en que cada jugador permaneció en pie.
         </p>
 
@@ -743,10 +792,16 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
           {lsStats.survivalRows.map((row) => {
             const isMine = row.participant.user_id === currentUserId;
             return (
-              <div key={row.participant.id} className="space-y-1">
+              <div key={row.participant.id} className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-800">
+                    <Avatar
+                      name={row.participant.name}
+                      url={resolveParticipantAvatar(row.participant)}
+                      size="xs"
+                      highlight={row.isChampion || isMine}
+                    />
+                    <span className="font-bold text-slate-800 dark:text-slate-100">
                       {row.participant.name}
                     </span>
                     {isMine && (
@@ -755,7 +810,7 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
                       </span>
                     )}
                   </div>
-                  <span className="font-semibold text-slate-600">
+                  <span className="font-semibold text-slate-600 dark:text-slate-300">
                     {row.isChampion
                       ? 'Campeón'
                       : row.isAlive
@@ -763,7 +818,7 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
                       : `Eliminado #${row.eliminationOrder}`}
                   </span>
                 </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                   <div
                     className={`h-full rounded-full ${
                       row.isChampion
@@ -857,7 +912,6 @@ function CustomStatsView({
 
   return (
     <div className="space-y-6">
-      {/* KPIs del Torneo Personalizado */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <KpiCard
           icon={Calendar}
@@ -889,11 +943,10 @@ function CustomStatsView({
         />
       </div>
 
-      {/* Salón de la Fama / Récords */}
       {stats.completedSubtournamentsCount > 0 ||
       stats.totalInternalMatchesPlayed > 0 ? (
         <div>
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
             <Award className="h-4 w-4 text-amber-500" />
             <span>Récords y destacados del torneo</span>
           </h3>
@@ -903,6 +956,7 @@ function CustomStatsView({
                 icon={Crown}
                 iconClass="text-amber-600"
                 title="Más subtorneos ganados (1.º)"
+                participant={stats.mostTitlesLeader.participant}
                 primary={stats.mostTitlesLeader.participant.name}
                 secondary={`${stats.mostTitlesLeader.firstPlaces} ${
                   stats.mostTitlesLeader.firstPlaces === 1
@@ -917,6 +971,7 @@ function CustomStatsView({
                 icon={Medal}
                 iconClass="text-indigo-600"
                 title="Más podios (Top 3)"
+                participant={stats.mostPodiumsLeader.participant}
                 primary={stats.mostPodiumsLeader.participant.name}
                 secondary={`${stats.mostPodiumsLeader.podiums} podios en ${stats.mostPodiumsLeader.completedSubtournamentsPlayed} subtorneos`}
               />
@@ -927,6 +982,7 @@ function CustomStatsView({
                 icon={TrendingUp}
                 iconClass="text-emerald-600"
                 title="Mejor promedio por subtorneo"
+                participant={stats.bestAverageLeader.participant}
                 primary={stats.bestAverageLeader.participant.name}
                 secondary={`${stats.bestAverageLeader.avgPointsPerSub} pts por participación`}
               />
@@ -937,6 +993,7 @@ function CustomStatsView({
                 icon={Flame}
                 iconClass="text-orange-600"
                 title="Mejor Jornada individual"
+                participant={stats.bestMatchdayOverall.participant}
                 primary={`${stats.bestMatchdayOverall.participant.name} (+${stats.bestMatchdayOverall.points} pts)`}
                 secondary={`Conseguido en ${stats.bestMatchdayOverall.matchdayName}`}
               />
@@ -964,19 +1021,18 @@ function CustomStatsView({
           </div>
         </div>
       ) : (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500">
+        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
           Crea y finaliza subtorneos en <strong>Cruces / Jornadas</strong> para
           comenzar a ver récords, promedios y evolución por jornada.
         </div>
       )}
 
-      {/* Comparativa visual de puntaje acumulado */}
       {stats.completedSubtournamentsCount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <h3 className="mb-1 text-sm font-bold text-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+          <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
             Comparativa de puntaje acumulado
           </h3>
-          <p className="mb-4 text-xs text-slate-500">
+          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
             Puntaje total sumado por cada participante en la Tabla General.
           </p>
 
@@ -985,10 +1041,16 @@ function CustomStatsView({
               const isMine = st.participant.user_id === currentUserId;
               const widthPct = Math.round((st.totalPoints / topPoints) * 100);
               return (
-                <div key={st.participant.id} className="space-y-1">
+                <div key={st.participant.id} className="space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-slate-800">
+                      <Avatar
+                        name={st.participant.name}
+                        url={resolveParticipantAvatar(st.participant)}
+                        size="xs"
+                        highlight={isMine}
+                      />
+                      <span className="font-bold text-slate-800 dark:text-slate-100">
                         {st.participant.name}
                       </span>
                       {isMine && (
@@ -997,16 +1059,16 @@ function CustomStatsView({
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-3 text-slate-500">
+                    <div className="flex items-center gap-3 text-slate-500 dark:text-slate-300">
                       <span className="hidden text-[11px] sm:inline">
                         {st.firstPlaces} títulos · {st.podiums} podios
                       </span>
-                      <span className="font-extrabold text-emerald-700">
+                      <span className="font-extrabold text-emerald-700 dark:text-emerald-400">
                         {st.totalPoints} pts
                       </span>
                     </div>
                   </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                     <div
                       className={`h-full rounded-full ${
                         isMine ? 'bg-emerald-600' : 'bg-indigo-600'
@@ -1021,13 +1083,16 @@ function CustomStatsView({
         </div>
       )}
 
-      {/* Ficha individual del jugador en Torneo Personalizado */}
       {selectedStats && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <div className="flex items-center gap-2">
-              <User className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-slate-900">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
+            <div className="flex items-center gap-2.5">
+              <Avatar
+                name={selectedStats.participant.name}
+                url={resolveParticipantAvatar(selectedStats.participant)}
+                size="sm"
+              />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                 Rendimiento individual
               </h3>
             </div>
@@ -1035,7 +1100,7 @@ function CustomStatsView({
             <select
               value={selectedStats.participant.id}
               onChange={(e) => onSelectPlayer(e.target.value)}
-              className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none"
+              className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
             >
               {participants.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -1046,77 +1111,76 @@ function CustomStatsView({
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Puntos totales
               </p>
-              <p className="mt-1 text-lg font-extrabold text-emerald-700">
+              <p className="mt-1 text-lg font-extrabold text-emerald-700 dark:text-emerald-400">
                 {selectedStats.totalPoints}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 Prom: {selectedStats.avgPointsPerSub} / subtorneo
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Títulos / Podios
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.firstPlaces} / {selectedStats.podiums}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {selectedStats.bestRank
                   ? `Mejor puesto: ${selectedStats.bestRank}.º`
                   : 'Sin puestos aún'}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Subtorneos jugados
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.completedSubtournamentsPlayed}
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 De {selectedStats.totalSubtournamentsJoined} anotados
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
-              <p className="text-[11px] font-semibold text-slate-500">
+            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
                 Cruces internos
               </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900">
+              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                 {selectedStats.internalWins}G-{selectedStats.internalDraws}E-
                 {selectedStats.internalLosses}P
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {selectedStats.internalMatchesPlayed} partidos jugados
               </p>
             </div>
           </div>
 
-          {/* Evolución por Jornada */}
           {selectedStats.timeline.length > 0 && (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4">
-              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-600">
+            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-950/40">
+              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
                 Evolución por Jornada
               </p>
               <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
                 {selectedStats.timeline.map((tl) => (
                   <div
                     key={tl.matchdayId}
-                    className="rounded-xl border border-slate-200 bg-white p-2.5 text-center"
+                    className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-800 dark:bg-slate-900/70"
                   >
-                    <p className="text-[11px] font-bold text-slate-500">
+                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
                       {tl.name}
                     </p>
-                    <p className="mt-0.5 text-base font-extrabold text-slate-900">
+                    <p className="mt-0.5 text-base font-extrabold text-slate-900 dark:text-white">
                       {tl.participated ? `+${tl.points}` : '—'}
                     </p>
-                    <p className="text-[10px] font-semibold text-emerald-700">
+                    <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
                       Acum: {tl.cumulativePoints} pts
                     </p>
                   </div>
@@ -1125,13 +1189,12 @@ function CustomStatsView({
             </div>
           )}
 
-          {/* Historial de Subtorneos */}
           {selectedStats.history.length > 0 && (
             <div className="mt-4">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                 Historial de subtorneos ({selectedStats.history.length})
               </p>
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                 {selectedStats.history.map((h) => {
                   const fmtMeta = getSubtournamentFormatMeta(h.format);
                   return (
@@ -1141,7 +1204,7 @@ function CustomStatsView({
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-bold text-slate-900">
+                          <span className="font-bold text-slate-900 dark:text-white">
                             {h.subName}
                           </span>
                           <span
@@ -1154,7 +1217,7 @@ function CustomStatsView({
                           </span>
                         </div>
                         {h.isTeamBased && (
-                          <p className="mt-0.5 text-[11px] text-slate-500">
+                          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
                             Equipo: <strong>{h.entryName}</strong>
                             {h.teammates.length > 0
                               ? ` (con ${h.teammates.join(', ')})`
@@ -1184,14 +1247,13 @@ function CustomStatsView({
         </div>
       )}
 
-      {/* Comparador Cara a Cara y Socios */}
       {participants.length >= 2 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Swords className="h-4 w-4 text-amber-600" />
-              <h3 className="text-sm font-bold text-slate-900">
-                Cara a Cara & Socios de Equipo
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Cara a Cara &amp; Socios de Equipo
               </h3>
             </div>
 
@@ -1199,7 +1261,7 @@ function CustomStatsView({
               <select
                 value={h2hPlayerAId}
                 onChange={(e) => onSelectH2HA(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {participants.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1213,7 +1275,7 @@ function CustomStatsView({
               <select
                 value={h2hPlayerBId}
                 onChange={(e) => onSelectH2HB(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 focus:border-emerald-500 focus:outline-none"
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {participants.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1225,46 +1287,46 @@ function CustomStatsView({
           </div>
 
           {h2hPlayerAId === h2hPlayerBId ? (
-            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500">
+            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
               Selecciona dos jugadores distintos para comparar su historial.
             </p>
           ) : !pairStats ? null : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Cruces directos
                   </p>
-                  <p className="mt-1 text-lg font-extrabold text-slate-900">
+                  <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                     {pairStats.matchWinsA} - {pairStats.matchDraws} -{' '}
                     {pairStats.matchWinsB}
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     {pairStats.playerA?.name} / Empates / {pairStats.playerB?.name}
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Tabla compartida
                   </p>
-                  <p className="mt-1 text-lg font-extrabold text-slate-900">
+                  <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
                     {pairStats.aheadCountA} - {pairStats.aheadCountB}
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     Veces mejor ubicado ({pairStats.timesOpponentsInCompletedSubs}{' '}
                     subtorneos)
                   </p>
                 </div>
 
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                     Como compañeros
                   </p>
-                  <p className="mt-1 text-lg font-extrabold text-indigo-700">
+                  <p className="mt-1 text-lg font-extrabold text-indigo-700 dark:text-indigo-400">
                     {pairStats.timesTeammates}
                   </p>
-                  <p className="text-[11px] text-slate-500">
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
                     {pairStats.teammateWins}{' '}
                     {pairStats.teammateWins === 1
                       ? 'subtorneo ganado juntos'
@@ -1274,17 +1336,19 @@ function CustomStatsView({
               </div>
 
               {pairStats.directMatches.length > 0 && (
-                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200">
+                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
                   {pairStats.directMatches.map((dm) => (
                     <div
                       key={dm.id}
                       className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs"
                     >
-                      <span className="text-slate-500">
-                        <strong className="text-slate-700">{dm.subName}</strong> ·{' '}
-                        {dm.roundName}
+                      <span className="text-slate-500 dark:text-slate-400">
+                        <strong className="text-slate-700 dark:text-slate-200">
+                          {dm.subName}
+                        </strong>{' '}
+                        · {dm.roundName}
                       </span>
-                      <span className="font-bold text-slate-900">
+                      <span className="font-bold text-slate-900 dark:text-slate-100">
                         {dm.hasScores
                           ? `${pairStats.playerA?.name} ${dm.scoreForA} - ${dm.scoreForB} ${pairStats.playerB?.name}`
                           : dm.winnerSide === 'draw'
