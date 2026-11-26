@@ -4,14 +4,20 @@ import {
   AlertCircle,
   ArrowLeft,
   BarChart3,
+  Camera,
   Check,
   Copy,
   Crown,
+  Eye,
   Layers,
   Link2,
   Loader2,
   Pencil,
   Plus,
+  RefreshCw,
+  Share2,
+  Shield,
+  ShieldCheck,
   Swords,
   Table2,
   Trash2,
@@ -23,6 +29,10 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
+  resolveParticipantAvatar,
+  uploadParticipantAvatar,
+} from '../utils/avatarUpload';
+import {
   formatShortDate,
   getConfigSummaryItems,
   getFormatMeta,
@@ -33,6 +43,7 @@ import {
   generateLeagueMatches,
   getKnockoutSeriesStatus,
 } from '../utils/tournamentEngine';
+import Avatar from './Avatar';
 import CustomMatchdaysTab from './CustomMatchdaysTab';
 import CustomStandingsTab from './CustomStandingsTab';
 import MatchResultModal from './MatchResultModal';
@@ -54,16 +65,36 @@ const HERO_GLOW_BY_FORMAT = {
   custom: 'from-indigo-500/18 via-violet-500/6 to-transparent',
 };
 
-function getInitials(name = '') {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[1][0]).toUpperCase();
+const PARTICIPANT_SELECT =
+  'id, tournament_id, name, user_id, avatar_url, created_at, profile:profiles(id, display_name, avatar_url)';
+
+const MEMBER_SELECT =
+  'id, tournament_id, user_id, role, created_at, profile:profiles(id, display_name, avatar_url)';
+
+async function copyTextToClipboard(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    document.body.removeChild(textarea);
+  }
 }
 
-export default function TournamentView({ tournamentId, user, onBack }) {
+export default function TournamentView({
+  tournamentId,
+  user,
+  profile,
+  onBack,
+}) {
   const [tournament, setTournament] = useState(null);
   const [membership, setMembership] = useState(null);
+  const [members, setMembers] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [matches, setMatches] = useState([]);
   const [eliminations, setEliminations] = useState([]);
@@ -86,6 +117,8 @@ export default function TournamentView({ tournamentId, user, onBack }) {
 
   const [activeTab, setActiveTab] = useState('standings');
   const [copiedCode, setCopiedCode] = useState(false);
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
+  const [regeneratingCode, setRegeneratingCode] = useState(false);
 
   const [newParticipantName, setNewParticipantName] = useState('');
   const [addingParticipant, setAddingParticipant] = useState(false);
@@ -96,7 +129,12 @@ export default function TournamentView({ tournamentId, user, onBack }) {
   const [editingParticipantId, setEditingParticipantId] = useState(null);
   const [editingParticipantName, setEditingParticipantName] = useState('');
   const [savingParticipantId, setSavingParticipantId] = useState(null);
+  const [uploadingAvatarId, setUploadingAvatarId] = useState(null);
   const [removingParticipantId, setRemovingParticipantId] = useState(null);
+  const [updatingRoleUserId, setUpdatingRoleUserId] = useState(null);
+
+  const participantAvatarInputRef = useRef(null);
+  const participantAvatarTargetRef = useRef(null);
 
   const [isEditingTournament, setIsEditingTournament] = useState(false);
   const [editTournamentName, setEditTournamentName] = useState('');
@@ -105,6 +143,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
   const [editRounds, setEditRounds] = useState('');
   const [editInitialLives, setEditInitialLives] = useState('1');
   const [editNotes, setEditNotes] = useState('');
+  const [editAllowSelfJoin, setEditAllowSelfJoin] = useState(true);
   const [savingTournament, setSavingTournament] = useState(false);
 
   const [confirmDeleteTournament, setConfirmDeleteTournament] = useState(false);
@@ -143,8 +182,9 @@ export default function TournamentView({ tournamentId, user, onBack }) {
 
     let finalMatchdays = matchdaysRes.data || [];
 
+    const hasAdminPriv = role === 'owner' || role === 'admin';
     if (
-      role === 'admin' &&
+      hasAdminPriv &&
       finalMatchdays.length === 0 &&
       autoInitMatchdaysTournamentRef.current !== tData.id
     ) {
@@ -245,12 +285,37 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     setPotAssignments(loadedPotAssignments);
   }, []);
 
+  const refreshParticipantsAndMembers = useCallback(async () => {
+    const [membersRes, participantsRes] = await Promise.all([
+      supabase
+        .from('tournament_members')
+        .select(MEMBER_SELECT)
+        .eq('tournament_id', tournamentId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('tournament_participants')
+        .select(PARTICIPANT_SELECT)
+        .eq('tournament_id', tournamentId)
+        .order('created_at', { ascending: true }),
+    ]);
+
+    if (!membersRes.error && membersRes.data) {
+      setMembers(membersRes.data);
+      const mine = membersRes.data.find((m) => m.user_id === user.id);
+      if (mine) setMembership(mine);
+    }
+
+    if (!participantsRes.error && participantsRes.data) {
+      setParticipants(participantsRes.data);
+    }
+  }, [tournamentId, user.id]);
+
   const loadTournamentData = useCallback(async () => {
     setLoading(true);
     setError('');
 
     try {
-      const [tournamentRes, membershipRes, participantsRes] = await Promise.all([
+      const [tournamentRes, membersRes, participantsRes] = await Promise.all([
         supabase
           .from('tournaments')
           .select('*')
@@ -258,30 +323,32 @@ export default function TournamentView({ tournamentId, user, onBack }) {
           .single(),
         supabase
           .from('tournament_members')
-          .select('id, role, user_id')
+          .select(MEMBER_SELECT)
           .eq('tournament_id', tournamentId)
-          .eq('user_id', user.id)
-          .maybeSingle(),
+          .order('created_at', { ascending: true }),
         supabase
           .from('tournament_participants')
-          .select('*')
+          .select(PARTICIPANT_SELECT)
           .eq('tournament_id', tournamentId)
           .order('created_at', { ascending: true }),
       ]);
 
       if (tournamentRes.error) throw tournamentRes.error;
-      if (membershipRes.error) throw membershipRes.error;
+      if (membersRes.error) throw membersRes.error;
       if (participantsRes.error) throw participantsRes.error;
 
-      if (!membershipRes.data) {
+      const allMembers = membersRes.data || [];
+      const mData = allMembers.find((m) => m.user_id === user.id) || null;
+
+      if (!mData) {
         throw new Error('No tienes acceso a este torneo.');
       }
 
       const tData = tournamentRes.data;
-      const mData = membershipRes.data;
 
       setTournament(tData);
       setMembership(mData);
+      setMembers(allMembers);
       setParticipants(participantsRes.data || []);
 
       if (tData.format === 'custom') {
@@ -331,14 +398,121 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     loadTournamentData();
   }, [loadTournamentData]);
 
-  const participantMap = useMemo(
-    () => new Map(participants.map((p) => [p.id, p])),
+  // Sincronizar si el usuario actual actualiza su propio perfil/avatar desde Navbar
+  useEffect(() => {
+    if (!profile?.id) return;
+    setParticipants((prev) =>
+      prev.map((p) =>
+        p.user_id === profile.id
+          ? {
+              ...p,
+              profile: {
+                id: profile.id,
+                display_name: profile.display_name,
+                avatar_url: profile.avatar_url,
+              },
+            }
+          : p
+      )
+    );
+    setMembers((prev) =>
+      prev.map((m) =>
+        m.user_id === profile.id
+          ? {
+              ...m,
+              profile: {
+                id: profile.id,
+                display_name: profile.display_name,
+                avatar_url: profile.avatar_url,
+              },
+            }
+          : m
+      )
+    );
+  }, [profile]);
+
+  // Suscripción Realtime ligera para participantes, miembros e info del torneo
+  useEffect(() => {
+    if (!supabase || !tournamentId) return;
+
+    const channel = supabase
+      .channel(`tournament-core-${tournamentId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tournament_participants',
+          filter: `tournament_id=eq.${tournamentId}`,
+        },
+        () => {
+          refreshParticipantsAndMembers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tournament_members',
+          filter: `tournament_id=eq.${tournamentId}`,
+        },
+        () => {
+          refreshParticipantsAndMembers();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'tournaments',
+          filter: `id=eq.${tournamentId}`,
+        },
+        (payload) => {
+          if (payload?.new) {
+            setTournament((prev) => (prev ? { ...prev, ...payload.new } : payload.new));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tournamentId, refreshParticipantsAndMembers]);
+
+  // Enriquecer participantes con avatar efectivo (propio o heredado de profiles)
+  const enrichedParticipants = useMemo(
+    () =>
+      participants.map((p) => ({
+        ...p,
+        effective_avatar_url: resolveParticipantAvatar(p),
+      })),
     [participants]
   );
 
-  const isAdmin = membership?.role === 'admin';
+  const participantMap = useMemo(
+    () => new Map(enrichedParticipants.map((p) => [p.id, p])),
+    [enrichedParticipants]
+  );
+
+  const memberByUserId = useMemo(
+    () => new Map(members.map((m) => [m.user_id, m])),
+    [members]
+  );
+
+  const spectatorMembers = useMemo(() => {
+    const linkedUserIds = new Set(
+      participants.map((p) => p.user_id).filter(Boolean)
+    );
+    return members.filter((m) => !linkedUserIds.has(m.user_id));
+  }, [members, participants]);
+
+  const isOwner = membership?.role === 'owner';
+  const isAdmin = membership?.role === 'owner' || membership?.role === 'admin';
   const myLinkedParticipant =
-    participants.find((p) => p.user_id === user.id) || null;
+    enrichedParticipants.find((p) => p.user_id === user.id) || null;
 
   const refreshCustomDataSilently = useCallback(async () => {
     if (!tournament || tournament.format !== 'custom' || !membership) return;
@@ -475,9 +649,9 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     try {
       let generatedRows = [];
       if (tournament.format === 'league') {
-        generatedRows = generateLeagueMatches(tournament, participants);
+        generatedRows = generateLeagueMatches(tournament, enrichedParticipants);
       } else if (tournament.format === 'knockout') {
-        generatedRows = generateKnockoutMatches(tournament, participants);
+        generatedRows = generateKnockoutMatches(tournament, enrichedParticipants);
       } else {
         throw new Error('Este formato no utiliza generación automática de cruces.');
       }
@@ -637,22 +811,38 @@ export default function TournamentView({ tournamentId, user, onBack }) {
 
   async function handleCopyInviteCode() {
     if (!tournament?.invite_code) return;
-
-    try {
-      await navigator.clipboard.writeText(tournament.invite_code);
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = tournament.invite_code;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-
+    await copyTextToClipboard(tournament.invite_code);
     setCopiedCode(true);
     setTimeout(() => setCopiedCode(false), 2000);
+  }
+
+  async function handleCopyInviteLink() {
+    if (!tournament?.invite_code) return;
+    const url = `${window.location.origin}/?invite=${tournament.invite_code}`;
+    await copyTextToClipboard(url);
+    setCopiedInviteLink(true);
+    setTimeout(() => setCopiedInviteLink(false), 2200);
+  }
+
+  async function handleRegenerateInviteCode() {
+    if (!isAdmin || !tournament) return;
+    setRegeneratingCode(true);
+    setError('');
+
+    try {
+      const { data: newCode, error: rpcError } = await supabase.rpc(
+        'regenerate_tournament_invite_code',
+        { p_tournament_id: tournament.id }
+      );
+
+      if (rpcError) throw rpcError;
+
+      setTournament((prev) => (prev ? { ...prev, invite_code: newCode } : prev));
+    } catch (err) {
+      setError(err?.message || 'No se pudo regenerar el código de invitación.');
+    } finally {
+      setRegeneratingCode(false);
+    }
   }
 
   async function handleClaimParticipant(participantId) {
@@ -660,16 +850,13 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     setClaimingId(participantId);
 
     try {
-      const { data, error: rpcError } = await supabase.rpc(
+      const { error: rpcError } = await supabase.rpc(
         'claim_tournament_participant',
         { p_participant_id: participantId }
       );
 
       if (rpcError) throw rpcError;
-
-      setParticipants((prev) =>
-        prev.map((item) => (item.id === participantId ? data : item))
-      );
+      await refreshParticipantsAndMembers();
     } catch (err) {
       setParticipantActionError(
         err?.message || 'No se pudo vincular tu cuenta a este participante.'
@@ -707,7 +894,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
           tournament_id: tournament.id,
           name: cleanName,
         })
-        .select()
+        .select(PARTICIPANT_SELECT)
         .single();
 
       if (insertError) throw insertError;
@@ -747,7 +934,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
         .from('tournament_participants')
         .update({ name: cleanName })
         .eq('id', participantId)
-        .select()
+        .select(PARTICIPANT_SELECT)
         .single();
 
       if (updateError) throw updateError;
@@ -766,6 +953,106 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     }
   }
 
+  function triggerParticipantAvatarUpload(participantId) {
+    if (!isAdmin) return;
+    participantAvatarTargetRef.current = participantId;
+    participantAvatarInputRef.current?.click();
+  }
+
+  async function handleParticipantAvatarFileChange(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const participantId = participantAvatarTargetRef.current;
+    participantAvatarTargetRef.current = null;
+
+    if (!file || !participantId || !isAdmin || !tournament) return;
+
+    setParticipantActionError('');
+    setUploadingAvatarId(participantId);
+
+    try {
+      const { publicUrl } = await uploadParticipantAvatar(
+        tournament.id,
+        participantId,
+        file
+      );
+
+      const { data, error: updateError } = await supabase
+        .from('tournament_participants')
+        .update({ avatar_url: publicUrl })
+        .eq('id', participantId)
+        .select(PARTICIPANT_SELECT)
+        .single();
+
+      if (updateError) throw updateError;
+
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === participantId ? data : p))
+      );
+    } catch (err) {
+      setParticipantActionError(
+        err?.message || 'No se pudo subir la foto del participante.'
+      );
+    } finally {
+      setUploadingAvatarId(null);
+    }
+  }
+
+  async function handleClearParticipantAvatar(participantId) {
+    if (!isAdmin) return;
+    setParticipantActionError('');
+    setUploadingAvatarId(participantId);
+
+    try {
+      const { data, error: updateError } = await supabase
+        .from('tournament_participants')
+        .update({ avatar_url: null })
+        .eq('id', participantId)
+        .select(PARTICIPANT_SELECT)
+        .single();
+
+      if (updateError) throw updateError;
+
+      setParticipants((prev) =>
+        prev.map((p) => (p.id === participantId ? data : p))
+      );
+    } catch (err) {
+      setParticipantActionError(
+        err?.message || 'No se pudo quitar la foto del participante.'
+      );
+    } finally {
+      setUploadingAvatarId(null);
+    }
+  }
+
+  async function handleToggleAdminRole(targetUserId, currentRole) {
+    if (!isOwner || !tournament || !targetUserId) return;
+    const nextRole = currentRole === 'admin' ? 'member' : 'admin';
+
+    setParticipantActionError('');
+    setUpdatingRoleUserId(targetUserId);
+
+    try {
+      const { error: rpcError } = await supabase.rpc(
+        'update_tournament_member_role',
+        {
+          p_tournament_id: tournament.id,
+          p_user_id: targetUserId,
+          p_new_role: nextRole,
+        }
+      );
+
+      if (rpcError) throw rpcError;
+      await refreshParticipantsAndMembers();
+    } catch (err) {
+      setParticipantActionError(
+        err?.message || 'No se pudo actualizar el rol del participante.'
+      );
+    } finally {
+      setUpdatingRoleUserId(null);
+    }
+  }
+
   async function handleUnlinkParticipant(participantId) {
     if (!isAdmin) return;
     setParticipantActionError('');
@@ -776,7 +1063,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
         .from('tournament_participants')
         .update({ user_id: null })
         .eq('id', participantId)
-        .select()
+        .select(PARTICIPANT_SELECT)
         .single();
 
       if (unlinkError) throw unlinkError;
@@ -832,6 +1119,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
     setEditRounds(cfg.rounds ? String(cfg.rounds) : '');
     setEditInitialLives(cfg.initial_lives ? String(cfg.initial_lives) : '1');
     setEditNotes(cfg.notes || '');
+    setEditAllowSelfJoin(cfg.allow_self_join !== false);
     setIsEditingTournament(true);
   }
 
@@ -846,29 +1134,34 @@ export default function TournamentView({ tournamentId, user, onBack }) {
       ? Number.parseInt(editRounds.trim(), 10)
       : null;
 
-    let nextConfig = {};
+    let baseConfig = {};
     if (tournament.format === 'league') {
-      nextConfig = {
+      baseConfig = {
         home_and_away: editHomeAndAway,
         ...(parsedRounds && parsedRounds > 0 ? { rounds: parsedRounds } : {}),
       };
     } else if (tournament.format === 'knockout') {
-      nextConfig = {
+      baseConfig = {
         home_and_away: editHomeAndAway,
         third_place: editThirdPlace,
       };
     } else if (tournament.format === 'last_standing') {
       const parsedLives = Number.parseInt(editInitialLives.trim() || '1', 10);
-      nextConfig = {
+      baseConfig = {
         initial_lives: Number.isNaN(parsedLives) || parsedLives < 1 ? 1 : parsedLives,
         ...(parsedRounds && parsedRounds > 0 ? { rounds: parsedRounds } : {}),
       };
     } else {
-      nextConfig = {
+      baseConfig = {
         ...(parsedRounds && parsedRounds > 0 ? { rounds: parsedRounds } : {}),
         ...(editNotes.trim() ? { notes: editNotes.trim() } : {}),
       };
     }
+
+    const nextConfig = {
+      ...baseConfig,
+      allow_self_join: editAllowSelfJoin,
+    };
 
     setSavingTournament(true);
     setError('');
@@ -896,7 +1189,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
   }
 
   async function handleDeleteTournament() {
-    if (!isAdmin || !tournament) return;
+    if (!isOwner || !tournament) return;
     setDeletingTournament(true);
 
     try {
@@ -933,7 +1226,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 inline-flex items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Volver a mis torneos</span>
@@ -961,10 +1254,9 @@ export default function TournamentView({ tournamentId, user, onBack }) {
       <div className="mb-4">
         <motion.button
           type="button"
-          whileHover={{ x: -2 }}
           whileTap={{ scale: 0.97 }}
           onClick={onBack}
-          className="inline-flex items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Volver a mis torneos</span>
@@ -1002,7 +1294,13 @@ export default function TournamentView({ tournamentId, user, onBack }) {
               <span
                 className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${roleMeta.badgeClass}`}
               >
-                {isAdmin ? <Crown className="h-3 w-3" /> : <User className="h-3 w-3" />}
+                {membership.role === 'owner' ? (
+                  <Crown className="h-3 w-3" />
+                ) : membership.role === 'admin' ? (
+                  <ShieldCheck className="h-3 w-3" />
+                ) : (
+                  <User className="h-3 w-3" />
+                )}
                 <span>{roleMeta.fullLabel}</span>
               </span>
 
@@ -1040,13 +1338,13 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                       maxLength={80}
                       value={editTournamentName}
                       onChange={(e) => setEditTournamentName(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm"
                     />
                   </div>
 
                   {tournament.format === 'league' && (
                     <div className="flex flex-wrap gap-3">
-                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
                         <input
                           type="checkbox"
                           checked={editHomeAndAway}
@@ -1062,14 +1360,14 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         value={editRounds}
                         onChange={(e) => setEditRounds(e.target.value)}
                         placeholder="Jornadas (opcional)"
-                        className="w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        className="w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
                       />
                     </div>
                   )}
 
                   {tournament.format === 'knockout' && (
                     <div className="flex flex-wrap gap-3">
-                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
                         <input
                           type="checkbox"
                           checked={editHomeAndAway}
@@ -1078,7 +1376,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         />
                         <span>Cruces ida y vuelta</span>
                       </label>
-                      <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
                         <input
                           type="checkbox"
                           checked={editThirdPlace}
@@ -1099,7 +1397,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         value={editInitialLives}
                         onChange={(e) => setEditInitialLives(e.target.value)}
                         placeholder="Vidas iniciales"
-                        className="w-36 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        className="w-36 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
                       />
                       <input
                         type="number"
@@ -1108,7 +1406,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         value={editRounds}
                         onChange={(e) => setEditRounds(e.target.value)}
                         placeholder="Máx. jornadas"
-                        className="w-40 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        className="w-40 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
                       />
                     </div>
                   )}
@@ -1122,7 +1420,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         value={editRounds}
                         onChange={(e) => setEditRounds(e.target.value)}
                         placeholder="Jornadas"
-                        className="w-32 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        className="w-32 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
                       />
                       <input
                         type="text"
@@ -1130,17 +1428,27 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         value={editNotes}
                         onChange={(e) => setEditNotes(e.target.value)}
                         placeholder="Regla o nota"
-                        className="min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 focus:border-emerald-500 focus:outline-none"
+                        className="min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
                       />
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2 pt-1">
+                  <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={editAllowSelfJoin}
+                      onChange={(e) => setEditAllowSelfJoin(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                    />
+                    <span>Permitir que nuevos invitados se anoten solos como participantes</span>
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
                     <motion.button
                       whileTap={{ scale: 0.96 }}
                       type="submit"
                       disabled={savingTournament}
-                      className="inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                      className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
                     >
                       {savingTournament && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                       <span>Guardar cambios</span>
@@ -1149,7 +1457,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                       type="button"
                       onClick={() => setIsEditingTournament(false)}
                       disabled={savingTournament}
-                      className="rounded-xl border border-slate-200 bg-white px-3.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                      className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
                     >
                       Cancelar
                     </button>
@@ -1168,54 +1476,55 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     </h1>
 
                     {isAdmin && (
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <motion.button
                           whileTap={{ scale: 0.95 }}
                           type="button"
                           onClick={openTournamentEdit}
-                          className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                           <span>Editar</span>
                         </motion.button>
 
-                        {!confirmDeleteTournament ? (
-                          <motion.button
-                            whileTap={{ scale: 0.95 }}
-                            type="button"
-                            onClick={() => setConfirmDeleteTournament(true)}
-                            className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/80 px-2.5 py-1 text-xs font-semibold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800/80"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            <span>Eliminar</span>
-                          </motion.button>
-                        ) : (
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-2.5 py-1"
-                          >
-                            <span className="text-xs font-semibold text-rose-700">
-                              ¿Confirmar?
-                            </span>
-                            <button
+                        {isOwner &&
+                          (!confirmDeleteTournament ? (
+                            <motion.button
+                              whileTap={{ scale: 0.95 }}
                               type="button"
-                              onClick={handleDeleteTournament}
-                              disabled={deletingTournament}
-                              className="rounded-lg bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                              onClick={() => setConfirmDeleteTournament(true)}
+                              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800/80"
                             >
-                              {deletingTournament ? 'Eliminando...' : 'Sí, eliminar'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setConfirmDeleteTournament(false)}
-                              disabled={deletingTournament}
-                              className="rounded-lg bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Eliminar</span>
+                            </motion.button>
+                          ) : (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.95 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 p-1.5"
                             >
-                              No
-                            </button>
-                          </motion.div>
-                        )}
+                              <span className="px-1.5 text-xs font-semibold text-rose-700">
+                                ¿Eliminar torneo?
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleDeleteTournament}
+                                disabled={deletingTournament}
+                                className="min-h-[44px] rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                              >
+                                {deletingTournament ? 'Eliminando...' : 'Sí, eliminar'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmDeleteTournament(false)}
+                                disabled={deletingTournament}
+                                className="min-h-[44px] rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                              >
+                                No
+                              </button>
+                            </motion.div>
+                          ))}
                       </div>
                     )}
                   </div>
@@ -1237,53 +1546,79 @@ export default function TournamentView({ tournamentId, user, onBack }) {
             </AnimatePresence>
           </div>
 
-          {/* Código de invitación con animación al copiar */}
-          <div className="flex shrink-0 flex-col rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 backdrop-blur-sm sm:min-w-[235px] dark:border-slate-700/80 dark:bg-slate-900/75">
-            <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-              Código de invitación
-            </span>
-            <div className="mt-1.5 flex items-center justify-between gap-3">
+          {/* Invitación: código, link directo y regeneración */}
+          <div className="flex shrink-0 flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 backdrop-blur-sm sm:min-w-[270px] dark:border-slate-700/80 dark:bg-slate-900/75">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                Invitación al torneo
+              </span>
+              {isAdmin && (
+                <motion.button
+                  whileTap={{ scale: 0.94 }}
+                  type="button"
+                  disabled={regeneratingCode}
+                  onClick={handleRegenerateInviteCode}
+                  title="Regenerar código de invitación"
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${regeneratingCode ? 'animate-spin' : ''}`}
+                  />
+                  <span>Regenerar</span>
+                </motion.button>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
               <span className="font-mono text-lg font-extrabold tracking-widest text-slate-900 dark:text-emerald-300">
                 {tournament.invite_code}
               </span>
               <motion.button
-                whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.94 }}
                 type="button"
                 onClick={handleCopyInviteCode}
-                className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
                   copiedCode
                     ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
                     : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
                 }`}
               >
-                <AnimatePresence mode="wait" initial={false}>
-                  {copiedCode ? (
-                    <motion.span
-                      key="copied"
-                      initial={{ scale: 0.7, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.7, opacity: 0 }}
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                      <span>¡Copiado!</span>
-                    </motion.span>
-                  ) : (
-                    <motion.span
-                      key="copy"
-                      initial={{ scale: 0.7, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.7, opacity: 0 }}
-                      className="inline-flex items-center gap-1.5"
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                      <span>Copiar</span>
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+                {copiedCode ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" />
+                    <span>¡Copiado!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" />
+                    <span>Código</span>
+                  </>
+                )}
               </motion.button>
             </div>
+
+            <motion.button
+              whileTap={{ scale: 0.97 }}
+              type="button"
+              onClick={handleCopyInviteLink}
+              className={`inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                copiedInviteLink
+                  ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
+                  : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300'
+              }`}
+            >
+              {copiedInviteLink ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  <span>¡Link copiado para compartir!</span>
+                </>
+              ) : (
+                <>
+                  <Share2 className="h-4 w-4" />
+                  <span>Invitar con link</span>
+                </>
+              )}
+            </motion.button>
           </div>
         </div>
       </motion.section>
@@ -1306,7 +1641,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     key={tab.id}
                     type="button"
                     onClick={() => setActiveTab(tab.id)}
-                    className={`relative inline-flex shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold transition ${
+                    className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold transition ${
                       isActive
                         ? 'text-emerald-700 dark:text-emerald-300'
                         : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -1340,7 +1675,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     (tournament.format === 'custom' ? (
                       <CustomStandingsTab
                         tournament={tournament}
-                        participants={participants}
+                        participants={enrichedParticipants}
                         matchdays={customMatchdays}
                         subtournaments={subtournaments}
                         subEntries={subEntries}
@@ -1350,7 +1685,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     ) : (
                       <TournamentStandingsTab
                         tournament={tournament}
-                        participants={participants}
+                        participants={enrichedParticipants}
                         matches={matches}
                         eliminations={eliminations}
                         currentUserId={user.id}
@@ -1361,7 +1696,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     (tournament.format === 'custom' ? (
                       <CustomMatchdaysTab
                         tournament={tournament}
-                        participants={participants}
+                        participants={enrichedParticipants}
                         matchdays={customMatchdays}
                         subtournaments={subtournaments}
                         subEntries={subEntries}
@@ -1382,7 +1717,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     ) : (
                       <TournamentMatchesTab
                         tournament={tournament}
-                        participants={participants}
+                        participants={enrichedParticipants}
                         matches={matches}
                         eliminations={eliminations}
                         isAdmin={isAdmin}
@@ -1407,7 +1742,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                   {activeTab === 'stats' && (
                     <TournamentStatsTab
                       tournament={tournament}
-                      participants={participants}
+                      participants={enrichedParticipants}
                       matches={matches}
                       eliminations={eliminations}
                       customMatchdays={customMatchdays}
@@ -1425,7 +1760,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
           </div>
         </motion.section>
 
-        {/* Lista de Participantes */}
+        {/* Lista de Participantes y Roles */}
         <motion.aside
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1433,19 +1768,26 @@ export default function TournamentView({ tournamentId, user, onBack }) {
           className="lg:col-span-4"
         >
           <div className="glass-card rounded-3xl p-5">
+            <input
+              ref={participantAvatarInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleParticipantAvatarFileChange}
+              className="hidden"
+            />
+
             <div className="mb-4 flex items-center justify-between gap-2">
               <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
                 <Users className="h-4 w-4 text-emerald-500" />
-                <span>Participantes ({participants.length})</span>
+                <span>Participantes ({enrichedParticipants.length})</span>
               </h2>
 
               {tournament.format === 'custom' && (
                 <motion.button
-                  whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.95 }}
                   type="button"
                   onClick={() => setIsPotModalOpen(true)}
-                  className="inline-flex items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
                 >
                   <Layers className="h-3.5 w-3.5" />
                   <span>Bombos ({potSets.length})</span>
@@ -1453,12 +1795,13 @@ export default function TournamentView({ tournamentId, user, onBack }) {
               )}
             </div>
 
-            {!myLinkedParticipant && participants.some((p) => !p.user_id) && (
-              <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
-                ¿Tu nombre ya está en la lista? Haz clic en{' '}
-                <strong>Vincularme</strong> para asociar tu cuenta a tu jugador.
-              </div>
-            )}
+            {!myLinkedParticipant &&
+              enrichedParticipants.some((p) => !p.user_id) && (
+                <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
+                  ¿Tu nombre ya está en la lista? Toca{' '}
+                  <strong>Vincularme</strong> para asociar tu cuenta y tu avatar.
+                </div>
+              )}
 
             {isAdmin && (
               <form onSubmit={handleAddParticipant} className="mb-4 flex gap-2">
@@ -1471,13 +1814,13 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                     if (participantActionError) setParticipantActionError('');
                   }}
                   placeholder="Agregar participante..."
-                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+                  className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm"
                 />
                 <motion.button
                   whileTap={{ scale: 0.95 }}
                   type="submit"
                   disabled={addingParticipant}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
+                  className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
                   aria-label="Agregar participante"
                 >
                   {addingParticipant ? (
@@ -1497,7 +1840,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
               </div>
             )}
 
-            {participants.length === 0 ? (
+            {enrichedParticipants.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">
                 {isAdmin
                   ? 'Aún no hay participantes. Usa el campo de arriba para agregar jugadores.'
@@ -1506,16 +1849,33 @@ export default function TournamentView({ tournamentId, user, onBack }) {
             ) : (
               <ul className="space-y-2.5">
                 <AnimatePresence initial={false}>
-                  {participants.map((participant) => {
+                  {enrichedParticipants.map((participant) => {
                     const isMine = participant.user_id === user.id;
                     const isLinked = Boolean(participant.user_id);
+                    const linkedMember = isLinked
+                      ? memberByUserId.get(participant.user_id)
+                      : null;
+                    const linkedRole = linkedMember?.role || null;
+                    const linkedRoleMeta = linkedRole
+                      ? getRoleMeta(linkedRole)
+                      : null;
+
                     const canClaim = !isLinked && !myLinkedParticipant;
+                    const canOwnerToggleRole =
+                      isOwner &&
+                      isLinked &&
+                      participant.user_id !== user.id &&
+                      linkedMember &&
+                      linkedMember.role !== 'owner';
+
                     const isEditingThis =
                       isAdmin && editingParticipantId === participant.id;
                     const isBusy =
                       claimingId === participant.id ||
                       savingParticipantId === participant.id ||
-                      removingParticipantId === participant.id;
+                      uploadingAvatarId === participant.id ||
+                      removingParticipantId === participant.id ||
+                      (isLinked && updatingRoleUserId === participant.user_id);
 
                     return (
                       <motion.li
@@ -1532,150 +1892,233 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                         }`}
                       >
                         {isEditingThis ? (
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="text"
-                              maxLength={50}
-                              autoFocus
-                              value={editingParticipantName}
-                              onChange={(e) =>
-                                setEditingParticipantName(e.target.value)
-                              }
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleSaveParticipantName(participant.id);
-                                } else if (e.key === 'Escape') {
-                                  setEditingParticipantId(null);
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                maxLength={50}
+                                autoFocus
+                                value={editingParticipantName}
+                                onChange={(e) =>
+                                  setEditingParticipantName(e.target.value)
                                 }
-                              }}
-                              className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 focus:border-emerald-500 focus:outline-none"
-                            />
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() =>
-                                handleSaveParticipantName(participant.id)
-                              }
-                              className="rounded-lg bg-emerald-600 p-1.5 text-white hover:bg-emerald-700 disabled:opacity-50"
-                              aria-label="Guardar nombre"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => setEditingParticipantId(null)}
-                              className="rounded-lg border border-slate-200 bg-white p-1.5 text-slate-500 hover:bg-slate-100"
-                              aria-label="Cancelar edición"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveParticipantName(participant.id);
+                                  } else if (e.key === 'Escape') {
+                                    setEditingParticipantId(null);
+                                  }
+                                }}
+                                className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm"
+                              />
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  handleSaveParticipantName(participant.id)
+                                }
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-600 p-2 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                aria-label="Guardar nombre"
+                              >
+                                <Check className="h-4 w-4" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() => setEditingParticipantId(null)}
+                                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-100"
+                                aria-label="Cancelar edición"
+                              >
+                                <X className="h-4 w-4" />
+                              </button>
+                            </div>
+
+                            {participant.avatar_url && (
+                              <button
+                                type="button"
+                                disabled={isBusy}
+                                onClick={() =>
+                                  handleClearParticipantAvatar(participant.id)
+                                }
+                                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                <span>Quitar foto personalizada</span>
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex min-w-0 items-center gap-2.5">
-                              <div
-                                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-extrabold shadow-xs ${
-                                  isMine
-                                    ? 'bg-gradient-to-br from-emerald-500 to-teal-600 text-white'
-                                    : isLinked
-                                    ? 'bg-gradient-to-br from-sky-500/20 to-indigo-500/20 text-sky-700 dark:text-sky-300'
-                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
-                                }`}
-                              >
-                                {getInitials(participant.name)}
-                              </div>
-
-                              <div className="min-w-0">
-                                <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                                  {participant.name}
-                                </p>
-                                <div className="mt-0.5 flex items-center gap-1 text-[11px]">
-                                  {isMine ? (
-                                    <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">
-                                      <UserCheck className="h-3 w-3" />
-                                      <span>Tu perfil vinculado</span>
-                                    </span>
-                                  ) : isLinked ? (
-                                    <span className="inline-flex items-center gap-1 font-medium text-sky-700 dark:text-sky-300">
-                                      <UserCheck className="h-3 w-3" />
-                                      <span>Cuenta vinculada</span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400">
-                                      Sin cuenta vinculada
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2.5">
+                                <div className="relative shrink-0">
+                                  <Avatar
+                                    name={participant.name}
+                                    url={participant.effective_avatar_url}
+                                    size="md"
+                                    highlight={isMine}
+                                  />
+                                  {uploadingAvatarId === participant.id && (
+                                    <span className="absolute inset-0 flex items-center justify-center rounded-full bg-slate-950/60 text-white">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
                                     </span>
                                   )}
                                 </div>
+
+                                <div className="min-w-0">
+                                  <div className="flex flex-wrap items-center gap-1.5">
+                                    <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      {participant.name}
+                                    </p>
+                                    {linkedRoleMeta && linkedRole !== 'member' && (
+                                      <span
+                                        className={`inline-flex items-center gap-0.5 rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${linkedRoleMeta.badgeClass}`}
+                                      >
+                                        {linkedRole === 'owner' ? (
+                                          <Crown className="h-2.5 w-2.5" />
+                                        ) : (
+                                          <ShieldCheck className="h-2.5 w-2.5" />
+                                        )}
+                                        <span>{linkedRoleMeta.label}</span>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <div className="mt-0.5 flex items-center gap-1 text-[11px]">
+                                    {isMine ? (
+                                      <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">
+                                        <UserCheck className="h-3 w-3" />
+                                        <span>Tu perfil</span>
+                                      </span>
+                                    ) : isLinked ? (
+                                      <span className="inline-flex items-center gap-1 font-medium text-sky-700 dark:text-sky-300">
+                                        <UserCheck className="h-3 w-3" />
+                                        <span>Cuenta vinculada</span>
+                                      </span>
+                                    ) : (
+                                      <span className="text-slate-400">
+                                        Sin cuenta vinculada
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
                               </div>
-                            </div>
 
-                            <div className="flex shrink-0 items-center gap-1">
-                              {canClaim && (
-                                <motion.button
-                                  whileTap={{ scale: 0.94 }}
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() =>
-                                    handleClaimParticipant(participant.id)
-                                  }
-                                  className="inline-flex items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
-                                >
-                                  {claimingId === participant.id ? (
-                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                  ) : (
-                                    <Link2 className="h-3.5 w-3.5" />
-                                  )}
-                                  <span>Vincularme</span>
-                                </motion.button>
-                              )}
-
-                              {isAdmin && (
-                                <>
-                                  <button
+                              <div className="flex shrink-0 items-center gap-0.5">
+                                {canClaim && (
+                                  <motion.button
+                                    whileTap={{ scale: 0.94 }}
                                     type="button"
                                     disabled={isBusy}
                                     onClick={() =>
-                                      startEditingParticipant(participant)
+                                      handleClaimParticipant(participant.id)
                                     }
-                                    className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
-                                    title="Editar nombre"
-                                    aria-label={`Editar a ${participant.name}`}
+                                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
                                   >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                  </button>
+                                    {claimingId === participant.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Link2 className="h-3.5 w-3.5" />
+                                    )}
+                                    <span>Vincularme</span>
+                                  </motion.button>
+                                )}
 
-                                  {isLinked && (
+                                {isAdmin && (
+                                  <>
                                     <button
                                       type="button"
                                       disabled={isBusy}
                                       onClick={() =>
-                                        handleUnlinkParticipant(participant.id)
+                                        triggerParticipantAvatarUpload(
+                                          participant.id
+                                        )
                                       }
-                                      className="rounded-lg p-1.5 text-slate-400 transition hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
-                                      title="Desvincular cuenta"
-                                      aria-label={`Desvincular cuenta de ${participant.name}`}
+                                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-emerald-600 disabled:opacity-50"
+                                      title="Subir foto del participante"
+                                      aria-label={`Subir foto de ${participant.name}`}
                                     >
-                                      <Unlink className="h-3.5 w-3.5" />
+                                      <Camera className="h-4 w-4" />
                                     </button>
-                                  )}
 
-                                  <button
-                                    type="button"
-                                    disabled={isBusy}
-                                    onClick={() =>
-                                      handleDeleteParticipant(participant.id)
-                                    }
-                                    className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
-                                    title="Eliminar participante"
-                                    aria-label={`Eliminar a ${participant.name}`}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </button>
-                                </>
-                              )}
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() =>
+                                        startEditingParticipant(participant)
+                                      }
+                                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                                      title="Editar nombre"
+                                      aria-label={`Editar a ${participant.name}`}
+                                    >
+                                      <Pencil className="h-4 w-4" />
+                                    </button>
+
+                                    {isLinked && (
+                                      <button
+                                        type="button"
+                                        disabled={isBusy}
+                                        onClick={() =>
+                                          handleUnlinkParticipant(participant.id)
+                                        }
+                                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
+                                        title="Desvincular cuenta"
+                                        aria-label={`Desvincular cuenta de ${participant.name}`}
+                                      >
+                                        <Unlink className="h-4 w-4" />
+                                      </button>
+                                    )}
+
+                                    <button
+                                      type="button"
+                                      disabled={isBusy}
+                                      onClick={() =>
+                                        handleDeleteParticipant(participant.id)
+                                      }
+                                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                                      title="Eliminar participante"
+                                      aria-label={`Eliminar a ${participant.name}`}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
                             </div>
+
+                            {canOwnerToggleRole && (
+                              <div className="flex items-center justify-end border-t border-slate-100 pt-2 dark:border-slate-800/80">
+                                <button
+                                  type="button"
+                                  disabled={isBusy}
+                                  onClick={() =>
+                                    handleToggleAdminRole(
+                                      participant.user_id,
+                                      linkedMember.role
+                                    )
+                                  }
+                                  className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                                    linkedMember.role === 'admin'
+                                      ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-300'
+                                      : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300'
+                                  }`}
+                                >
+                                  {updatingRoleUserId === participant.user_id ? (
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  ) : linkedMember.role === 'admin' ? (
+                                    <Shield className="h-3.5 w-3.5" />
+                                  ) : (
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                  )}
+                                  <span>
+                                    {linkedMember.role === 'admin'
+                                      ? 'Quitar rol Admin'
+                                      : 'Promover a Admin'}
+                                  </span>
+                                </button>
+                              </div>
+                            )}
                           </div>
                         )}
                       </motion.li>
@@ -1683,6 +2126,66 @@ export default function TournamentView({ tournamentId, user, onBack }) {
                   })}
                 </AnimatePresence>
               </ul>
+            )}
+
+            {/* Espectadores / Miembros sin participante asignado */}
+            {spectatorMembers.length > 0 && (
+              <div className="mt-5 border-t border-slate-200/80 pt-4 dark:border-slate-800">
+                <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <Eye className="h-3.5 w-3.5" />
+                  <span>Espectadores / Otros miembros ({spectatorMembers.length})</span>
+                </h3>
+                <ul className="space-y-2">
+                  {spectatorMembers.map((m) => {
+                    const mName = m.profile?.display_name || 'Usuario';
+                    const mRoleMeta = getRoleMeta(m.role);
+                    const canToggle =
+                      isOwner && m.user_id !== user.id && m.role !== 'owner';
+                    const isRoleBusy = updatingRoleUserId === m.user_id;
+
+                    return (
+                      <li
+                        key={m.id}
+                        className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50"
+                      >
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Avatar
+                            name={mName}
+                            url={m.profile?.avatar_url}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                              {mName}
+                            </p>
+                            <span
+                              className={`mt-0.5 inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-bold ${mRoleMeta.badgeClass}`}
+                            >
+                              {mRoleMeta.label}
+                            </span>
+                          </div>
+                        </div>
+
+                        {canToggle && (
+                          <button
+                            type="button"
+                            disabled={isRoleBusy}
+                            onClick={() => handleToggleAdminRole(m.user_id, m.role)}
+                            className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300"
+                          >
+                            {isRoleBusy && (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            )}
+                            <span>
+                              {m.role === 'admin' ? 'Quitar Admin' : 'Hacer Admin'}
+                            </span>
+                          </button>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             )}
           </div>
         </motion.aside>
@@ -1705,7 +2208,7 @@ export default function TournamentView({ tournamentId, user, onBack }) {
         <PotSetsModal
           isOpen={isPotModalOpen}
           tournamentId={tournament.id}
-          participants={participants}
+          participants={enrichedParticipants}
           potSets={potSets}
           potAssignments={potAssignments}
           isAdmin={isAdmin}

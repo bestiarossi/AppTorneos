@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Download,
@@ -10,9 +11,12 @@ import {
   Trophy,
   X,
 } from 'lucide-react';
+import Avatar from './Avatar';
 
 export default function Navbar({
   user,
+  profile,
+  onOpenProfile,
   onSignOut,
   signingOut,
   onGoHome,
@@ -79,6 +83,9 @@ export default function Navbar({
   const canShowInstallButton =
     !isStandalone && (Boolean(deferredPrompt) || isIosSafari);
 
+  const displayName =
+    profile?.display_name || user?.email?.split('@')[0] || 'Mi perfil';
+
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-md transition-colors duration-300 dark:border-slate-800/80 dark:bg-slate-950/75">
@@ -86,17 +93,12 @@ export default function Navbar({
           <motion.button
             type="button"
             onClick={onGoHome}
-            whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.97 }}
-            className="group flex items-center gap-2.5 text-left"
+            className="group flex min-h-[44px] items-center gap-2.5 text-left"
           >
-            <motion.div
-              whileHover={{ rotate: -6 }}
-              transition={{ type: 'spring', stiffness: 400, damping: 20 }}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/25"
-            >
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/25">
               <Trophy className="h-5 w-5" />
-            </motion.div>
+            </div>
             <div>
               <span className="block text-base font-extrabold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-emerald-400">
                 AppTorneos
@@ -107,12 +109,11 @@ export default function Navbar({
             </div>
           </motion.button>
 
-          <div className="flex items-center gap-2 sm:gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5">
             {onToggleTheme && (
               <motion.button
                 type="button"
                 onClick={onToggleTheme}
-                whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.94 }}
                 aria-label={
                   isDark
@@ -124,7 +125,7 @@ export default function Navbar({
                     ? 'Cambiar a Clean Glass Light'
                     : 'Cambiar a Arena Dark'
                 }
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-100/80 px-2.5 py-2 text-xs font-bold text-slate-700 transition hover:border-emerald-500/40 hover:bg-white dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:border-amber-400/40 dark:hover:bg-slate-800"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-100/80 px-2.5 py-2 text-xs font-bold text-slate-700 transition hover:border-emerald-500/40 hover:bg-white dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:border-amber-400/40 dark:hover:bg-slate-800"
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {isDark ? (
@@ -161,10 +162,9 @@ export default function Navbar({
             {canShowInstallButton && (
               <motion.button
                 type="button"
-                whileHover={{ scale: 1.03 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={handleInstallClick}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
               >
                 <Download className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Instalar App</span>
@@ -172,23 +172,31 @@ export default function Navbar({
               </motion.button>
             )}
 
-            {user?.email && (
-              <div className="hidden items-center gap-2 rounded-full border border-slate-200/80 bg-slate-50/80 px-3 py-1.5 text-xs font-medium text-slate-600 lg:flex dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-300">
-                <span className="relative flex h-2 w-2">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+            {onOpenProfile && (
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.96 }}
+                onClick={onOpenProfile}
+                aria-label="Editar mi perfil y avatar"
+                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-emerald-400/60 hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-800"
+              >
+                <Avatar
+                  name={displayName}
+                  url={profile?.avatar_url}
+                  size="sm"
+                />
+                <span className="hidden max-w-[140px] truncate sm:inline">
+                  {displayName}
                 </span>
-                <span className="max-w-[180px] truncate">{user.email}</span>
-              </div>
+              </motion.button>
             )}
 
             <motion.button
               type="button"
-              whileHover={{ scale: 1.02 }}
               whileTap={{ scale: 0.95 }}
               onClick={onSignOut}
               disabled={signingOut}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">
@@ -200,83 +208,87 @@ export default function Navbar({
         </div>
       </header>
 
-      <AnimatePresence>
-        {showIosGuide && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            className="fixed inset-0 z-60 flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setShowIosGuide(false);
-            }}
-          >
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 16, scale: 0.96 }}
-              transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-              className="glass-card w-full max-w-sm rounded-3xl p-5 shadow-2xl"
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
-                    <Smartphone className="h-4 w-4" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Instalar en iPhone / iPad
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowIosGuide(false)}
-                  className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <AnimatePresence>
+            {showIosGuide && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.18 }}
+                className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
+                onClick={(e) => {
+                  if (e.target === e.currentTarget) setShowIosGuide(false);
+                }}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 24, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 16, scale: 0.96 }}
+                  transition={{ type: 'spring', stiffness: 380, damping: 28 }}
+                  className="glass-card w-full max-w-sm rounded-3xl p-5 shadow-2xl"
                 >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        <Smartphone className="h-4 w-4" />
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                        Instalar en iPhone / iPad
+                      </h3>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowIosGuide(false)}
+                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
 
-              <ol className="space-y-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    1
-                  </span>
-                  <span>
-                    En la barra de Safari, toca el botón{' '}
-                    <strong className="inline-flex items-center gap-1 text-slate-900 dark:text-white">
-                      <Share className="h-3.5 w-3.5 text-sky-500" />
-                      Compartir
-                    </strong>
-                    .
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    2
-                  </span>
-                  <span>
-                    Desliza hacia abajo y selecciona{' '}
-                    <strong className="text-slate-900 dark:text-white">
-                      &quot;Agregar a inicio&quot;
-                    </strong>
-                    .
-                  </span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
-                    3
-                  </span>
-                  <span>
-                    Toca <strong className="text-slate-900 dark:text-white">Agregar</strong> y se
-                    abrirá como app nativa sin barra de navegador.
-                  </span>
-                </li>
-              </ol>
-            </motion.div>
-          </motion.div>
+                  <ol className="space-y-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+                    <li className="flex items-start gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        1
+                      </span>
+                      <span>
+                        En la barra de Safari, toca el botón{' '}
+                        <strong className="inline-flex items-center gap-1 text-slate-900 dark:text-white">
+                          <Share className="h-3.5 w-3.5 text-sky-500" />
+                          Compartir
+                        </strong>
+                        .
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        2
+                      </span>
+                      <span>
+                        Desliza hacia abajo y selecciona{' '}
+                        <strong className="text-slate-900 dark:text-white">
+                          &quot;Agregar a inicio&quot;
+                        </strong>
+                        .
+                      </span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                        3
+                      </span>
+                      <span>
+                        Toca <strong className="text-slate-900 dark:text-white">Agregar</strong> y
+                        se abrirá como app nativa sin barra de navegador.
+                      </span>
+                    </li>
+                  </ol>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </>
   );
 }

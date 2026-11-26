@@ -39,17 +39,27 @@ export function getFormatMeta(format) {
 }
 
 export function getRoleMeta(role) {
+  if (role === 'owner') {
+    return {
+      label: 'Owner',
+      fullLabel: 'Creador (Owner)',
+      badgeClass:
+        'bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-500/20 dark:text-amber-300 dark:border-amber-500/35',
+    };
+  }
+
   if (role === 'admin') {
     return {
       label: 'Admin',
       fullLabel: 'Administrador',
-      badgeClass: 'bg-amber-100 text-amber-800 border-amber-200',
+      badgeClass:
+        'bg-violet-100 text-violet-800 border-violet-200 dark:bg-violet-500/20 dark:text-violet-300 dark:border-violet-500/35',
     };
   }
 
   return {
-    label: 'Participante',
-    fullLabel: 'Participante',
+    label: 'Miembro',
+    fullLabel: 'Miembro',
     badgeClass: 'bg-sky-50 text-sky-700 border-sky-200',
   };
 }

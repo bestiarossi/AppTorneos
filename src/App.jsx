@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { AnimatePresence, MotionConfig, motion } from 'framer-motion';
-import { AlertTriangle, Loader2, Moon, Sparkles, Sun } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import AuthScreen from './components/AuthScreen';
 import Dashboard from './components/Dashboard';
+import InviteModal from './components/InviteModal';
 import Navbar from './components/Navbar';
+import ProfileModal from './components/ProfileModal';
 import TournamentView from './components/TournamentView';
 
 const THEME_STORAGE_KEY = 'torneoclub-theme';
+const INVITE_STORAGE_KEY = 'torneoclub-pending-invite';
 
 function getInitialTheme() {
   if (typeof window === 'undefined') return 'light';
@@ -18,12 +21,45 @@ function getInitialTheme() {
     : 'light';
 }
 
+function extractInviteCodeFromUrl() {
+  if (typeof window === 'undefined') return null;
+
+  const params = new URLSearchParams(window.location.search);
+  const queryInvite = params.get('invite');
+  if (queryInvite && queryInvite.trim()) {
+    return queryInvite.trim().toUpperCase();
+  }
+
+  const pathMatch = window.location.pathname.match(/^\/invite\/([A-Za-z0-9_-]+)\/?$/i);
+  if (pathMatch?.[1]) {
+    return pathMatch[1].trim().toUpperCase();
+  }
+
+  return null;
+}
+
+function getInitialInviteCode() {
+  if (typeof window === 'undefined') return null;
+  const fromUrl = extractInviteCodeFromUrl();
+  if (fromUrl) {
+    window.sessionStorage.setItem(INVITE_STORAGE_KEY, fromUrl);
+    return fromUrl;
+  }
+  const saved = window.sessionStorage.getItem(INVITE_STORAGE_KEY);
+  return saved ? saved.trim().toUpperCase() : null;
+}
+
 export default function App() {
   const [session, setSession] = useState(null);
+  const [profile, setProfile] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [signingOut, setSigningOut] = useState(false);
   const [selectedTournamentId, setSelectedTournamentId] = useState(null);
   const [theme, setTheme] = useState(getInitialTheme);
+
+  const [pendingInviteCode, setPendingInviteCode] = useState(getInitialInviteCode);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [dashboardRefreshKey, setDashboardRefreshKey] = useState(0);
 
   const isDark = theme === 'dark';
 
@@ -41,6 +77,42 @@ export default function App() {
     setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
   }
 
+  const loadUserProfile = useCallback(async (user) => {
+    if (!supabase || !user?.id) {
+      setProfile(null);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (!error && data) {
+      setProfile(data);
+      return;
+    }
+
+    // Fallback seguro si el perfil recién se creó o faltaba
+    const fallbackName =
+      user.user_metadata?.display_name ||
+      user.user_metadata?.full_name ||
+      user.email?.split('@')[0] ||
+      'Jugador';
+
+    const { data: created } = await supabase
+      .from('profiles')
+      .upsert(
+        { id: user.id, display_name: fallbackName },
+        { onConflict: 'id' }
+      )
+      .select()
+      .maybeSingle();
+
+    setProfile(created || { id: user.id, display_name: fallbackName, avatar_url: null });
+  }, []);
+
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase) {
       setAuthLoading(false);
@@ -53,7 +125,11 @@ export default function App() {
       .getSession()
       .then(({ data }) => {
         if (!isMounted) return;
-        setSession(data?.session ?? null);
+        const nextSession = data?.session ?? null;
+        setSession(nextSession);
+        if (nextSession?.user) {
+          loadUserProfile(nextSession.user);
+        }
         setAuthLoading(false);
       })
       .catch(() => {
@@ -66,8 +142,12 @@ export default function App() {
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!isMounted) return;
       setSession(nextSession ?? null);
-      if (!nextSession) {
+      if (nextSession?.user) {
+        loadUserProfile(nextSession.user);
+      } else {
+        setProfile(null);
         setSelectedTournamentId(null);
+        setIsProfileModalOpen(false);
       }
     });
 
@@ -75,7 +155,26 @@ export default function App() {
       isMounted = false;
       subscription.unsubscribe();
     };
+  }, [loadUserProfile]);
+
+  const clearPendingInvite = useCallback(() => {
+    setPendingInviteCode(null);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.removeItem(INVITE_STORAGE_KEY);
+      const hasUrlInvite = Boolean(extractInviteCodeFromUrl());
+      if (hasUrlInvite) {
+        window.history.replaceState({}, '', '/');
+      }
+    }
   }, []);
+
+  function handleInviteJoined(tournamentId) {
+    clearPendingInvite();
+    setDashboardRefreshKey((prev) => prev + 1);
+    if (tournamentId) {
+      setSelectedTournamentId(tournamentId);
+    }
+  }
 
   async function handleSignOut() {
     if (!supabase) return;
@@ -83,6 +182,7 @@ export default function App() {
     try {
       await supabase.auth.signOut();
       setSelectedTournamentId(null);
+      setProfile(null);
     } finally {
       setSigningOut(false);
     }
@@ -97,12 +197,19 @@ export default function App() {
             <h1 className="text-lg font-bold">Configuración de Supabase faltante</h1>
           </div>
           <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-            Crea un archivo <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">.env</code>{' '}
+            Crea un archivo{' '}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">
+              .env
+            </code>{' '}
             en la raíz del proyecto definiendo{' '}
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">VITE_SUPABASE_URL</code>{' '}
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">
+              VITE_SUPABASE_URL
+            </code>{' '}
             y{' '}
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">VITE_SUPABASE_ANON_KEY</code>,
-            y luego reinicia el servidor de desarrollo.
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-slate-800">
+              VITE_SUPABASE_ANON_KEY
+            </code>
+            , y luego reinicia el servidor de desarrollo.
           </p>
         </div>
       </div>
@@ -147,11 +254,17 @@ export default function App() {
         </div>
 
         {!session?.user ? (
-          <AuthScreen theme={theme} onToggleTheme={toggleTheme} />
+          <AuthScreen
+            theme={theme}
+            onToggleTheme={toggleTheme}
+            inviteCode={pendingInviteCode}
+          />
         ) : (
           <>
             <Navbar
               user={session.user}
+              profile={profile}
+              onOpenProfile={() => setIsProfileModalOpen(true)}
               onSignOut={handleSignOut}
               signingOut={signingOut}
               onGoHome={() => setSelectedTournamentId(null)}
@@ -171,6 +284,7 @@ export default function App() {
                   <TournamentView
                     tournamentId={selectedTournamentId}
                     user={session.user}
+                    profile={profile}
                     onBack={() => setSelectedTournamentId(null)}
                   />
                 </motion.div>
@@ -184,14 +298,31 @@ export default function App() {
                 >
                   <Dashboard
                     user={session.user}
+                    refreshTrigger={dashboardRefreshKey}
                     onSelectTournament={(id) => setSelectedTournamentId(id)}
                   />
                 </motion.div>
               )}
             </AnimatePresence>
+
+            <ProfileModal
+              isOpen={isProfileModalOpen}
+              user={session.user}
+              profile={profile}
+              onClose={() => setIsProfileModalOpen(false)}
+              onSaved={(updatedProfile) => setProfile(updatedProfile)}
+            />
+
+            <InviteModal
+              isOpen={Boolean(pendingInviteCode)}
+              inviteCode={pendingInviteCode}
+              user={session.user}
+              profile={profile}
+              onClose={clearPendingInvite}
+              onJoined={handleInviteJoined}
+            />
           </>
         )}
-
       </div>
     </MotionConfig>
   );

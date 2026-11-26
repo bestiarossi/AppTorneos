@@ -7,6 +7,7 @@ import {
   KeyRound,
   Loader2,
   Plus,
+  ShieldCheck,
   Trophy,
   User,
   Users,
@@ -20,7 +21,11 @@ import {
 } from '../utils/tournamentFormats';
 import CreateTournamentModal from './CreateTournamentModal';
 
-export default function Dashboard({ user, onSelectTournament }) {
+export default function Dashboard({
+  user,
+  refreshTrigger = 0,
+  onSelectTournament,
+}) {
   const [memberships, setMemberships] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -73,7 +78,7 @@ export default function Dashboard({ user, onSelectTournament }) {
 
   useEffect(() => {
     fetchTournaments();
-  }, [fetchTournaments]);
+  }, [fetchTournaments, refreshTrigger]);
 
   async function handleJoinByCode(e) {
     e.preventDefault();
@@ -107,7 +112,7 @@ export default function Dashboard({ user, onSelectTournament }) {
         tournamentId: data?.tournament_id,
         message: data?.already_member
           ? `Ya formabas parte de "${data?.name}".`
-          : `¡Te uniste al torneo "${data?.name}" como participante!`,
+          : `¡Te uniste al torneo "${data?.name}"!`,
       });
     } catch (err) {
       setJoinFeedback({
@@ -128,14 +133,20 @@ export default function Dashboard({ user, onSelectTournament }) {
     }
   }
 
+  function renderRoleIcon(role) {
+    if (role === 'owner') return <Crown className="h-3 w-3" />;
+    if (role === 'admin') return <ShieldCheck className="h-3 w-3" />;
+    return <User className="h-3 w-3" />;
+  }
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
+          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl dark:text-white">
             Mis Torneos
           </h1>
-          <p className="mt-1 text-sm text-slate-600">
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
             Administra tus competencias o únete con un código de invitación.
           </p>
         </div>
@@ -143,22 +154,22 @@ export default function Dashboard({ user, onSelectTournament }) {
         <button
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
         >
           <Plus className="h-4 w-4" />
           <span>Crear Torneo</span>
         </button>
       </div>
 
-      <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
+      <section className="glass-card mb-8 rounded-2xl p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
-              <KeyRound className="h-4 w-4 text-emerald-600" />
+            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
+              <KeyRound className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
               <span>Unirse con código de invitación</span>
             </h2>
-            <p className="mt-0.5 text-xs text-slate-500">
-              ¿Un amigo ya creó el torneo? Pídele el código e ingrésalo aquí.
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              ¿Un amigo ya creó el torneo? Pídele el código o link e ingrésalo aquí.
             </p>
           </div>
 
@@ -175,12 +186,12 @@ export default function Dashboard({ user, onSelectTournament }) {
               }}
               placeholder="Ej: A7K9M2"
               maxLength={16}
-              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 font-mono text-sm font-semibold tracking-wider text-slate-900 uppercase placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 placeholder:normal-case focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+              className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 font-mono text-base font-semibold tracking-wider text-slate-900 uppercase placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 placeholder:normal-case focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100"
             />
             <button
               type="submit"
               disabled={joining}
-              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-500"
             >
               {joining && <Loader2 className="h-4 w-4 animate-spin" />}
               <span>{joining ? 'Uniéndose...' : 'Unirse'}</span>
@@ -209,7 +220,7 @@ export default function Dashboard({ user, onSelectTournament }) {
               <button
                 type="button"
                 onClick={() => onSelectTournament(joinFeedback.tournamentId)}
-                className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
+                className="inline-flex min-h-[44px] items-center gap-1 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-emerald-700"
               >
                 <span>Abrir torneo</span>
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -228,7 +239,7 @@ export default function Dashboard({ user, onSelectTournament }) {
           <button
             type="button"
             onClick={fetchTournaments}
-            className="rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs hover:bg-rose-100"
+            className="min-h-[44px] rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-rose-700 shadow-xs hover:bg-rose-100"
           >
             Reintentar
           </button>
@@ -240,7 +251,7 @@ export default function Dashboard({ user, onSelectTournament }) {
           {[1, 2, 3].map((skeleton) => (
             <div
               key={skeleton}
-              className="h-48 animate-pulse rounded-2xl border border-slate-200 bg-white p-5"
+              className="glass-card h-48 animate-pulse rounded-2xl p-5"
             >
               <div className="mb-3 flex justify-between">
                 <div className="h-5 w-20 rounded-full bg-slate-200" />
@@ -252,21 +263,21 @@ export default function Dashboard({ user, onSelectTournament }) {
           ))}
         </div>
       ) : memberships.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-14 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+        <div className="glass-card rounded-2xl border-dashed px-6 py-14 text-center">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
             <Trophy className="h-6 w-6" />
           </div>
-          <h3 className="text-base font-bold text-slate-900">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
             Todavía no participas en ningún torneo
           </h3>
-          <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500">
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
             Crea un nuevo torneo para invitar a tus amigos o ingresa arriba un código de
             invitación si ya armaron uno.
           </p>
           <button
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
-            className="mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+            className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
           >
             <Plus className="h-4 w-4" />
             <span>Crear mi primer torneo</span>
@@ -290,18 +301,14 @@ export default function Dashboard({ user, onSelectTournament }) {
                 key={tournament.id}
                 type="button"
                 onClick={() => onSelectTournament(tournament.id)}
-                className="group flex flex-col justify-between rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-xs transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                className="glass-card group flex min-h-[44px] flex-col justify-between rounded-2xl p-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
               >
                 <div>
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${roleMeta.badgeClass}`}
                     >
-                      {role === 'admin' ? (
-                        <Crown className="h-3 w-3" />
-                      ) : (
-                        <User className="h-3 w-3" />
-                      )}
+                      {renderRoleIcon(role)}
                       <span>{roleMeta.label}</span>
                     </span>
 
@@ -312,7 +319,7 @@ export default function Dashboard({ user, onSelectTournament }) {
                     </span>
                   </div>
 
-                  <h3 className="line-clamp-2 text-lg font-bold text-slate-900 transition-colors group-hover:text-emerald-700">
+                  <h3 className="line-clamp-2 text-lg font-bold text-slate-900 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-400">
                     {tournament.name}
                   </h3>
 
@@ -321,7 +328,7 @@ export default function Dashboard({ user, onSelectTournament }) {
                       {configItems.slice(0, 2).map((item, idx) => (
                         <span
                           key={idx}
-                          className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600"
+                          className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                         >
                           {item}
                         </span>
@@ -330,9 +337,9 @@ export default function Dashboard({ user, onSelectTournament }) {
                   )}
                 </div>
 
-                <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500">
+                <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
                   <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1 font-medium text-slate-600">
+                    <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
                       <Users className="h-3.5 w-3.5 text-slate-400" />
                       {participantCount}{' '}
                       {participantCount === 1 ? 'jugador' : 'jugadores'}
@@ -342,7 +349,7 @@ export default function Dashboard({ user, onSelectTournament }) {
                     </span>
                   </div>
 
-                  <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-600">
+                  <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
                     <span>Entrar</span>
                     <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </span>
