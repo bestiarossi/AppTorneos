@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
@@ -76,6 +77,15 @@ export default function MatchResultModal({
       setTiebreakerWinnerId(null);
     }
   }, [isOpen, match, siblingLeg, tournamentFormat]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -288,7 +298,9 @@ export default function MatchResultModal({
     }
 
     if (needsTiebreaker && !tiebreakerWinnerId) {
-      setError('La serie quedó 1-1. Selecciona quién avanza a la siguiente ronda.');
+      setError(
+        'La serie quedó 1-1. Selecciona quién avanza a la siguiente ronda.'
+      );
       return;
     }
 
@@ -372,7 +384,9 @@ export default function MatchResultModal({
     ? participantMap.get(siblingLeg.participant_b_id)
     : null;
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && match && (
         <motion.div
@@ -381,31 +395,32 @@ export default function MatchResultModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4"
           onClick={(e) => {
             if (e.target === e.currentTarget && !saving) onClose();
           }}
         >
           <motion.div
             key="match-result-dialog"
-            initial={{ opacity: 0, scale: 0.95, y: 16 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 12 }}
-            transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="w-full max-w-lg overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95"
+            initial={{ opacity: 0, y: 24 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 34 }}
+            className="flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-200/90 bg-white shadow-2xl sm:rounded-2xl dark:border-slate-800 dark:bg-slate-900"
           >
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-5 py-4 dark:border-slate-800">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400">
+            {/* Header fijo */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3.5 sm:px-5 sm:py-4 dark:border-slate-800">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400">
                   <Swords className="h-5 w-5" />
                 </div>
-                <div>
-                  <h2 className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+                <div className="min-w-0">
+                  <h2 className="truncate text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
                     {match.status === 'completed'
                       ? 'Editar resultado'
                       : 'Cargar resultado'}
                   </h2>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                  <p className="truncate text-xs text-slate-500 dark:text-slate-400">
                     {match.round_name}
                     {isTwoLegKnockout
                       ? ` · ${
@@ -416,20 +431,23 @@ export default function MatchResultModal({
                 </div>
               </div>
 
-              <motion.button
+              <button
                 type="button"
-                whileHover={{ scale: 1.06 }}
-                whileTap={{ scale: 0.92 }}
                 disabled={saving}
                 onClick={onClose}
-                className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:active:bg-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 aria-label="Cerrar modal"
               >
                 <X className="h-5 w-5" />
-              </motion.button>
+              </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-5 p-5">
+            {/* Formulario scrolleable */}
+            <form
+              id="match-result-form"
+              onSubmit={handleSubmit}
+              className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-5 sm:p-5"
+            >
               {isTwoLegKnockout && siblingLeg && (
                 <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-xs text-slate-600 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-300">
                   <span className="font-bold text-slate-800 dark:text-white">
@@ -462,7 +480,7 @@ export default function MatchResultModal({
                     setMode('exact');
                     setError('');
                   }}
-                  className={`relative rounded-xl py-2 text-xs font-bold transition-colors sm:text-sm ${
+                  className={`relative min-h-[42px] rounded-xl py-2 text-xs font-bold transition-colors sm:text-sm ${
                     mode === 'exact'
                       ? 'text-slate-900 dark:text-white'
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -488,7 +506,7 @@ export default function MatchResultModal({
                     setMode('winner_only');
                     setError('');
                   }}
-                  className={`relative rounded-xl py-2 text-xs font-bold transition-colors sm:text-sm ${
+                  className={`relative min-h-[42px] rounded-xl py-2 text-xs font-bold transition-colors sm:text-sm ${
                     mode === 'winner_only'
                       ? 'text-slate-900 dark:text-white'
                       : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -518,7 +536,7 @@ export default function MatchResultModal({
                     transition={{ duration: 0.18 }}
                     className="overflow-hidden"
                   >
-                    <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200">
+                    <div className="flex items-start gap-2 rounded-2xl border border-rose-200 bg-rose-50 p-3 text-xs font-medium text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200">
                       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                       <span>{error}</span>
                     </div>
@@ -537,7 +555,7 @@ export default function MatchResultModal({
                     className="space-y-4"
                   >
                     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/75 p-4 dark:border-slate-800 dark:bg-slate-950/60">
-                      <div className="text-center">
+                      <div className="min-w-0 text-center">
                         <label
                           htmlFor="score-a-input"
                           className="mb-2 block truncate text-sm font-bold text-slate-900 dark:text-white"
@@ -553,7 +571,7 @@ export default function MatchResultModal({
                           value={scoreAInput}
                           onChange={(e) => setScoreAInput(e.target.value)}
                           placeholder="0"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white py-3 text-center text-2xl font-black text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900 dark:text-white"
+                          className="min-h-[54px] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 text-center text-2xl font-black text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900 dark:text-white"
                         />
                       </div>
 
@@ -561,7 +579,7 @@ export default function MatchResultModal({
                         -
                       </span>
 
-                      <div className="text-center">
+                      <div className="min-w-0 text-center">
                         <label
                           htmlFor="score-b-input"
                           className="mb-2 block truncate text-sm font-bold text-slate-900 dark:text-white"
@@ -577,7 +595,7 @@ export default function MatchResultModal({
                           value={scoreBInput}
                           onChange={(e) => setScoreBInput(e.target.value)}
                           placeholder="0"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white py-3 text-center text-2xl font-black text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900 dark:text-white"
+                          className="min-h-[54px] w-full rounded-xl border border-slate-200/90 bg-white py-2.5 text-center text-2xl font-black text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900 dark:text-white"
                         />
                       </div>
                     </div>
@@ -628,14 +646,12 @@ export default function MatchResultModal({
                           : 'grid-cols-1 sm:grid-cols-2'
                       }`}
                     >
-                      <motion.button
+                      <button
                         type="button"
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.97 }}
                         onClick={() =>
                           setSelectedWinnerOnly(match.participant_a_id)
                         }
-                        className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition-colors ${
+                        className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3.5 py-3 text-sm font-bold transition active:scale-[0.98] ${
                           selectedWinnerOnly === match.participant_a_id
                             ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 ring-2 ring-emerald-500/25 dark:border-emerald-400 dark:text-emerald-200'
                             : 'border-slate-200/90 bg-white/80 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-800/70'
@@ -643,32 +659,28 @@ export default function MatchResultModal({
                       >
                         <Trophy className="h-4 w-4 shrink-0" />
                         <span className="truncate">{playerA?.name}</span>
-                      </motion.button>
+                      </button>
 
                       {!isKnockout && (
-                        <motion.button
+                        <button
                           type="button"
-                          whileHover={{ y: -2 }}
-                          whileTap={{ scale: 0.97 }}
                           onClick={() => setSelectedWinnerOnly('draw')}
-                          className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition-colors ${
+                          className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3.5 py-3 text-sm font-bold transition active:scale-[0.98] ${
                             selectedWinnerOnly === 'draw'
                               ? 'border-amber-500 bg-amber-500/15 text-amber-800 ring-2 ring-amber-500/25 dark:border-amber-400 dark:text-amber-200'
                               : 'border-slate-200/90 bg-white/80 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-800/70'
                           }`}
                         >
                           <span>Empate</span>
-                        </motion.button>
+                        </button>
                       )}
 
-                      <motion.button
+                      <button
                         type="button"
-                        whileHover={{ y: -2 }}
-                        whileTap={{ scale: 0.97 }}
                         onClick={() =>
                           setSelectedWinnerOnly(match.participant_b_id)
                         }
-                        className={`flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-bold transition-colors ${
+                        className={`flex min-h-[48px] items-center justify-center gap-2 rounded-2xl border px-3.5 py-3 text-sm font-bold transition active:scale-[0.98] ${
                           selectedWinnerOnly === match.participant_b_id
                             ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 ring-2 ring-emerald-500/25 dark:border-emerald-400 dark:text-emerald-200'
                             : 'border-slate-200/90 bg-white/80 text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/60 dark:text-slate-200 dark:hover:bg-slate-800/70'
@@ -676,7 +688,7 @@ export default function MatchResultModal({
                       >
                         <Trophy className="h-4 w-4 shrink-0" />
                         <span className="truncate">{playerB?.name}</span>
-                      </motion.button>
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -698,91 +710,84 @@ export default function MatchResultModal({
                           : 'Partido empatado: elige quién avanza por desempate'}
                       </p>
                       <div className="grid grid-cols-2 gap-2.5">
-                        <motion.button
+                        <button
                           type="button"
-                          whileTap={{ scale: 0.97 }}
                           onClick={() =>
                             setTiebreakerWinnerId(match.participant_a_id)
                           }
-                          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${
+                          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition active:scale-[0.98] ${
                             tiebreakerWinnerId === match.participant_a_id
                               ? 'border-amber-600 bg-amber-600 text-white shadow-xs'
                               : 'border-amber-200 bg-white text-amber-900 hover:bg-amber-100/70 dark:border-amber-500/30 dark:bg-slate-900/90 dark:text-amber-200 dark:hover:bg-amber-500/20'
                           }`}
                         >
                           {tiebreakerWinnerId === match.participant_a_id && (
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-3.5 w-3.5 shrink-0" />
                           )}
                           <span className="truncate">{playerA?.name}</span>
-                        </motion.button>
+                        </button>
 
-                        <motion.button
+                        <button
                           type="button"
-                          whileTap={{ scale: 0.97 }}
                           onClick={() =>
                             setTiebreakerWinnerId(match.participant_b_id)
                           }
-                          className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition-colors ${
+                          className={`flex min-h-[44px] items-center justify-center gap-1.5 rounded-xl border px-3 py-2.5 text-xs font-bold transition active:scale-[0.98] ${
                             tiebreakerWinnerId === match.participant_b_id
                               ? 'border-amber-600 bg-amber-600 text-white shadow-xs'
                               : 'border-amber-200 bg-white text-amber-900 hover:bg-amber-100/70 dark:border-amber-500/30 dark:bg-slate-900/90 dark:text-amber-200 dark:hover:bg-amber-500/20'
                           }`}
                         >
                           {tiebreakerWinnerId === match.participant_b_id && (
-                            <Check className="h-3.5 w-3.5" />
+                            <Check className="h-3.5 w-3.5 shrink-0" />
                           )}
                           <span className="truncate">{playerB?.name}</span>
-                        </motion.button>
+                        </button>
                       </div>
                     </div>
                   </motion.div>
                 )}
               </AnimatePresence>
-
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200/80 pt-4 dark:border-slate-800">
-                <div>
-                  {match.status === 'completed' && (
-                    <motion.button
-                      type="button"
-                      whileHover={{ scale: 1.02 }}
-                      whileTap={{ scale: 0.96 }}
-                      disabled={saving}
-                      onClick={handleResetMatch}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100 disabled:opacity-50 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
-                    >
-                      <RotateCcw className="h-3.5 w-3.5" />
-                      <span>Resetear a pendiente</span>
-                    </motion.button>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <motion.button
-                    type="button"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.96 }}
-                    disabled={saving}
-                    onClick={onClose}
-                    className="rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
-                  >
-                    Cancelar
-                  </motion.button>
-                  <motion.button
-                    type="submit"
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.96 }}
-                    disabled={saving}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60"
-                  >
-                    {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                    <span>Guardar resultado</span>
-                  </motion.button>
-                </div>
-              </div>
             </form>
+
+            {/* Footer fijo siempre accesible */}
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-t border-slate-200/80 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 dark:border-slate-800 dark:bg-slate-900">
+              {match.status === 'completed' && (
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleResetMatch}
+                  className="inline-flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition active:bg-rose-100 hover:bg-rose-100 disabled:opacity-50 sm:w-auto dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" />
+                  <span>Resetear a pendiente</span>
+                </button>
+              )}
+
+              <div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={onClose}
+                  className="min-h-[44px] flex-1 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition active:bg-slate-100 hover:bg-slate-50 disabled:opacity-50 sm:flex-none dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  form="match-result-form"
+                  disabled={saving}
+                  className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition active:scale-[0.98] hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 sm:flex-none"
+                >
+                  {saving && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <span>Guardar</span>
+                </button>
+              </div>
+            </div>
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }
