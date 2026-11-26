@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
   Loader2,
   Plus,
+  Sparkles,
   Trash2,
   Trophy,
   Users,
@@ -11,6 +13,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { TOURNAMENT_FORMAT_LIST } from '../utils/tournamentFormats';
+import { TOURNAMENT_SPORT_LIST } from '../utils/tournamentThemes';
+import { useToast } from './ToastProvider';
 
 export default function CreateTournamentModal({
   isOpen,
@@ -18,13 +22,16 @@ export default function CreateTournamentModal({
   userId,
   onCreated,
 }) {
+  const toast = useToast();
   const [name, setName] = useState('');
+  const [sport, setSport] = useState('football');
   const [format, setFormat] = useState('league');
   const [homeAndAway, setHomeAndAway] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
   const [rounds, setRounds] = useState('');
   const [initialLives, setInitialLives] = useState('1');
   const [notes, setNotes] = useState('');
+  const [allowSelfJoin, setAllowSelfJoin] = useState(true);
 
   const [participantInput, setParticipantInput] = useState('');
   const [participants, setParticipants] = useState([]);
@@ -50,12 +57,14 @@ export default function CreateTournamentModal({
 
   function resetForm() {
     setName('');
+    setSport('football');
     setFormat('league');
     setHomeAndAway(false);
     setThirdPlace(false);
     setRounds('');
     setInitialLives('1');
     setNotes('');
+    setAllowSelfJoin(true);
     setParticipantInput('');
     setParticipants([]);
     setParticipantError('');
@@ -102,9 +111,14 @@ export default function CreateTournamentModal({
 
   function buildConfig() {
     const parsedRounds = rounds.trim() ? Number.parseInt(rounds.trim(), 10) : null;
+    const base = {
+      sport,
+      allow_self_join: allowSelfJoin,
+    };
 
     if (format === 'league') {
       return {
+        ...base,
         home_and_away: homeAndAway,
         ...(parsedRounds ? { rounds: parsedRounds } : {}),
       };
@@ -112,6 +126,7 @@ export default function CreateTournamentModal({
 
     if (format === 'knockout') {
       return {
+        ...base,
         home_and_away: homeAndAway,
         third_place: thirdPlace,
       };
@@ -120,12 +135,14 @@ export default function CreateTournamentModal({
     if (format === 'last_standing') {
       const parsedLives = Number.parseInt(initialLives.trim() || '1', 10);
       return {
+        ...base,
         initial_lives: Number.isNaN(parsedLives) || parsedLives < 1 ? 1 : parsedLives,
         ...(parsedRounds ? { rounds: parsedRounds } : {}),
       };
     }
 
     return {
+      ...base,
       ...(parsedRounds ? { rounds: parsedRounds } : {}),
       ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
@@ -192,6 +209,7 @@ export default function CreateTournamentModal({
         }
       }
 
+      toast.success(`¡Torneo "${cleanName}" creado!`);
       resetForm();
       onCreated(createdTournament.id);
     } catch (err) {
@@ -201,7 +219,9 @@ export default function CreateTournamentModal({
     }
   }
 
-  return (
+  if (typeof document === 'undefined') return null;
+
+  return createPortal(
     <AnimatePresence>
       {isOpen && (
         <motion.div
@@ -210,7 +230,7 @@ export default function CreateTournamentModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/65 p-4 backdrop-blur-sm sm:items-center"
           onClick={(e) => {
             if (e.target === e.currentTarget) handleSafeClose();
           }}
@@ -221,9 +241,9 @@ export default function CreateTournamentModal({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
             transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-            className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-slate-200/90 bg-white/95 shadow-2xl backdrop-blur-xl dark:border-slate-800 dark:bg-slate-900/95"
+            className="glass-card flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl shadow-2xl"
           >
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-4 dark:border-slate-800">
+            <div className="flex items-center justify-between border-b border-slate-200/80 px-5 py-4 sm:px-6 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:text-emerald-400">
                   <Trophy className="h-5 w-5" />
@@ -233,18 +253,17 @@ export default function CreateTournamentModal({
                     Crear nuevo torneo
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Quedarás registrado automáticamente como administrador.
+                    Quedarás registrado como Creador (Owner)
                   </p>
                 </div>
               </div>
 
               <motion.button
                 type="button"
-                whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.92 }}
                 onClick={handleSafeClose}
                 disabled={submitting}
-                className="rounded-xl p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 aria-label="Cerrar modal"
               >
                 <X className="h-5 w-5" />
@@ -253,7 +272,7 @@ export default function CreateTournamentModal({
 
             <form
               onSubmit={handleSubmit}
-              className="flex-1 space-y-6 overflow-y-auto px-6 py-5"
+              className="flex-1 space-y-5 overflow-y-auto px-5 py-5 sm:px-6"
             >
               <AnimatePresence>
                 {error && (
@@ -287,8 +306,36 @@ export default function CreateTournamentModal({
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Ej: Copa Amigos 2026, Liga del Viernes..."
-                  className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-950/70 dark:text-slate-100"
+                  className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-950/70 dark:text-slate-100"
                 />
+              </div>
+
+              {/* Temática / Deporte */}
+              <div>
+                <span className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                  <span>Deporte / Temática</span>
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {TOURNAMENT_SPORT_LIST.map((item) => {
+                    const selected = sport === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSport(item.id)}
+                        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                          selected
+                            ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 ring-2 ring-emerald-500/20 dark:border-emerald-400 dark:text-emerald-200'
+                            : 'border-slate-200/90 bg-white/75 text-slate-600 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-300'
+                        }`}
+                      >
+                        <span className="text-base leading-none">{item.emoji}</span>
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div>
@@ -302,10 +349,9 @@ export default function CreateTournamentModal({
                       <motion.button
                         key={item.value}
                         type="button"
-                        whileHover={{ y: -2 }}
                         whileTap={{ scale: 0.985 }}
                         onClick={() => setFormat(item.value)}
-                        className={`rounded-2xl border p-3.5 text-left transition-colors ${
+                        className={`min-h-[44px] rounded-2xl border p-3.5 text-left transition-colors ${
                           selected
                             ? 'border-emerald-500 bg-emerald-500/10 ring-2 ring-emerald-500/25 dark:border-emerald-400 dark:bg-emerald-500/15'
                             : 'border-slate-200/90 bg-white/70 hover:border-slate-300 hover:bg-slate-50/80 dark:border-slate-800 dark:bg-slate-950/50 dark:hover:border-slate-700 dark:hover:bg-slate-800/60'
@@ -347,7 +393,7 @@ export default function CreateTournamentModal({
                       transition={{ duration: 0.16 }}
                       className="grid grid-cols-1 gap-4 sm:grid-cols-2"
                     >
-                      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
                         <input
                           type="checkbox"
                           checked={homeAndAway}
@@ -374,7 +420,7 @@ export default function CreateTournamentModal({
                           value={rounds}
                           onChange={(e) => setRounds(e.target.value)}
                           placeholder="Automático"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
                         />
                       </div>
                     </motion.div>
@@ -389,7 +435,7 @@ export default function CreateTournamentModal({
                       transition={{ duration: 0.16 }}
                       className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                     >
-                      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
                         <input
                           type="checkbox"
                           checked={homeAndAway}
@@ -401,7 +447,7 @@ export default function CreateTournamentModal({
                         </span>
                       </label>
 
-                      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
                         <input
                           type="checkbox"
                           checked={thirdPlace}
@@ -438,7 +484,7 @@ export default function CreateTournamentModal({
                           max={10}
                           value={initialLives}
                           onChange={(e) => setInitialLives(e.target.value)}
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-sm text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
                         />
                       </div>
 
@@ -457,7 +503,7 @@ export default function CreateTournamentModal({
                           value={rounds}
                           onChange={(e) => setRounds(e.target.value)}
                           placeholder="Hasta quedar 1"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
                         />
                       </div>
                     </motion.div>
@@ -487,7 +533,7 @@ export default function CreateTournamentModal({
                           value={rounds}
                           onChange={(e) => setRounds(e.target.value)}
                           placeholder="Ej: 6"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
                         />
                       </div>
 
@@ -505,12 +551,22 @@ export default function CreateTournamentModal({
                           value={notes}
                           onChange={(e) => setNotes(e.target.value)}
                           placeholder="Ej: Puntos extra por diferencia"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
                         />
                       </div>
                     </motion.div>
                   )}
                 </AnimatePresence>
+
+                <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2 text-xs font-medium text-slate-700 dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={allowSelfJoin}
+                    onChange={(e) => setAllowSelfJoin(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span>Permitir que nuevos invitados se anoten solos desde el link</span>
+                </label>
               </div>
 
               <div>
@@ -540,14 +596,13 @@ export default function CreateTournamentModal({
                     }}
                     onKeyDown={handleParticipantKeyDown}
                     placeholder="Nombre del jugador (ej: Santi, Mateo...)"
-                    className="flex-1 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none dark:border-slate-700/80 dark:bg-slate-950/70 dark:text-slate-100"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-950/70 dark:text-slate-100"
                   />
                   <motion.button
                     type="button"
-                    whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.96 }}
                     onClick={handleAddParticipant}
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
+                    className="inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white shadow-xs transition hover:bg-slate-800 dark:bg-emerald-600 dark:hover:bg-emerald-500"
                   >
                     <Plus className="h-4 w-4" />
                     <span>Agregar</span>
@@ -588,7 +643,7 @@ export default function CreateTournamentModal({
                           <button
                             type="button"
                             onClick={() => handleRemoveParticipant(index)}
-                            className="rounded-lg p-1 text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
+                            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
                             aria-label={`Quitar a ${pName}`}
                           >
                             <Trash2 className="h-4 w-4" />
@@ -606,23 +661,21 @@ export default function CreateTournamentModal({
                 )}
               </div>
 
-              <div className="flex items-center justify-end gap-3 border-t border-slate-200/80 pt-4 dark:border-slate-800">
+              <div className="flex flex-col-reverse gap-2 border-t border-slate-200/80 pt-4 sm:flex-row sm:justify-end dark:border-slate-800">
                 <motion.button
                   type="button"
-                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.96 }}
                   onClick={handleSafeClose}
                   disabled={submitting}
-                  className="rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-slate-700/80 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
                   Cancelar
                 </motion.button>
                 <motion.button
                   type="submit"
-                  whileHover={{ scale: 1.02 }}
                   whileTap={{ scale: 0.96 }}
                   disabled={submitting}
-                  className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
                   <span>{submitting ? 'Creando torneo...' : 'Crear Torneo'}</span>
@@ -632,6 +685,7 @@ export default function CreateTournamentModal({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>,
+    document.body
   );
 }

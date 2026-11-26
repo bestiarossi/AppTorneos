@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   AlertCircle,
   CheckCircle2,
@@ -19,13 +20,17 @@ import {
   getFormatMeta,
   getRoleMeta,
 } from '../utils/tournamentFormats';
+import { getTournamentTheme } from '../utils/tournamentThemes';
 import CreateTournamentModal from './CreateTournamentModal';
+import { DashboardSkeleton } from './Skeletons';
+import { useToast } from './ToastProvider';
 
 export default function Dashboard({
   user,
   refreshTrigger = 0,
   onSelectTournament,
 }) {
+  const toast = useToast();
   const [memberships, setMemberships] = useState([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
@@ -107,18 +112,23 @@ export default function Dashboard({
       setInviteCode('');
       await fetchTournaments();
 
+      const msg = data?.already_member
+        ? `Ya formabas parte de "${data?.name}".`
+        : `¡Te uniste al torneo "${data?.name}"!`;
+
+      toast.success(msg);
       setJoinFeedback({
         type: 'success',
         tournamentId: data?.tournament_id,
-        message: data?.already_member
-          ? `Ya formabas parte de "${data?.name}".`
-          : `¡Te uniste al torneo "${data?.name}"!`,
+        message: msg,
       });
     } catch (err) {
+      const errMsg =
+        err?.message || 'No fue posible unirte con ese código de invitación.';
+      toast.error(errMsg);
       setJoinFeedback({
         type: 'error',
-        message:
-          err?.message || 'No fue posible unirte con ese código de invitación.',
+        message: errMsg,
       });
     } finally {
       setJoining(false);
@@ -143,7 +153,7 @@ export default function Dashboard({
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl dark:text-white">
+          <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl dark:text-white">
             Mis Torneos
           </h1>
           <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">
@@ -151,14 +161,15 @@ export default function Dashboard({
           </p>
         </div>
 
-        <button
+        <motion.button
+          whileTap={{ scale: 0.96 }}
           type="button"
           onClick={() => setIsCreateModalOpen(true)}
-          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+          className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500"
         >
           <Plus className="h-4 w-4" />
           <span>Crear Torneo</span>
-        </button>
+        </motion.button>
       </div>
 
       <section className="glass-card mb-8 rounded-2xl p-5">
@@ -188,14 +199,15 @@ export default function Dashboard({
               maxLength={16}
               className="flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 font-mono text-base font-semibold tracking-wider text-slate-900 uppercase placeholder:font-sans placeholder:font-normal placeholder:tracking-normal placeholder:text-slate-400 placeholder:normal-case focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-100"
             />
-            <button
+            <motion.button
+              whileTap={{ scale: 0.96 }}
               type="submit"
               disabled={joining}
               className="inline-flex min-h-[44px] shrink-0 items-center justify-center gap-2 rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-emerald-600 dark:hover:bg-emerald-500"
             >
               {joining && <Loader2 className="h-4 w-4 animate-spin" />}
               <span>{joining ? 'Uniéndose...' : 'Unirse'}</span>
-            </button>
+            </motion.button>
           </form>
         </div>
 
@@ -247,21 +259,7 @@ export default function Dashboard({
       )}
 
       {loading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {[1, 2, 3].map((skeleton) => (
-            <div
-              key={skeleton}
-              className="glass-card h-48 animate-pulse rounded-2xl p-5"
-            >
-              <div className="mb-3 flex justify-between">
-                <div className="h-5 w-20 rounded-full bg-slate-200" />
-                <div className="h-5 w-24 rounded-full bg-slate-200" />
-              </div>
-              <div className="mb-2 h-6 w-3/4 rounded-lg bg-slate-200" />
-              <div className="h-4 w-1/2 rounded-lg bg-slate-100" />
-            </div>
-          ))}
-        </div>
+        <DashboardSkeleton />
       ) : memberships.length === 0 ? (
         <div className="glass-card rounded-2xl border-dashed px-6 py-14 text-center">
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-slate-800">
@@ -274,21 +272,23 @@ export default function Dashboard({
             Crea un nuevo torneo para invitar a tus amigos o ingresa arriba un código de
             invitación si ya armaron uno.
           </p>
-          <button
+          <motion.button
+            whileTap={{ scale: 0.96 }}
             type="button"
             onClick={() => setIsCreateModalOpen(true)}
             className="mt-5 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700"
           >
             <Plus className="h-4 w-4" />
             <span>Crear mi primer torneo</span>
-          </button>
+          </motion.button>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {memberships.map((membership) => {
+          {memberships.map((membership, idx) => {
             const { tournament, role } = membership;
             const formatMeta = getFormatMeta(tournament.format);
             const roleMeta = getRoleMeta(role);
+            const sportTheme = getTournamentTheme(tournament.config);
             const configItems = getConfigSummaryItems(
               tournament.format,
               tournament.config
@@ -297,14 +297,23 @@ export default function Dashboard({
               tournament.tournament_participants?.[0]?.count ?? 0;
 
             return (
-              <button
+              <motion.button
                 key={tournament.id}
                 type="button"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: Math.min(idx * 0.04, 0.28) }}
+                whileTap={{ scale: 0.985 }}
                 onClick={() => onSelectTournament(tournament.id)}
-                className="glass-card group flex min-h-[44px] flex-col justify-between rounded-2xl p-5 text-left transition hover:-translate-y-0.5 hover:border-emerald-300 hover:shadow-md"
+                className={`glass-card group relative flex min-h-[44px] flex-col justify-between overflow-hidden rounded-2xl p-5 text-left transition hover:shadow-lg ${sportTheme.accentBorder}`}
               >
+                {/* Ribbon superior temático */}
+                <div
+                  className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${sportTheme.cardRibbon}`}
+                />
+
                 <div>
-                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-1.5">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${roleMeta.badgeClass}`}
                     >
@@ -312,22 +321,31 @@ export default function Dashboard({
                       <span>{roleMeta.label}</span>
                     </span>
 
-                    <span
-                      className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${formatMeta.badgeClass}`}
-                    >
-                      {formatMeta.label}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${sportTheme.badgeClass}`}
+                      >
+                        <span>{sportTheme.emoji}</span>
+                        <span className="hidden sm:inline">{sportTheme.label}</span>
+                      </span>
+
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${formatMeta.badgeClass}`}
+                      >
+                        {formatMeta.label}
+                      </span>
+                    </div>
                   </div>
 
-                  <h3 className="line-clamp-2 text-lg font-bold text-slate-900 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-400">
+                  <h3 className="line-clamp-2 text-lg font-extrabold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-emerald-400">
                     {tournament.name}
                   </h3>
 
                   {configItems.length > 0 && (
                     <div className="mt-2.5 flex flex-wrap gap-1.5">
-                      {configItems.slice(0, 2).map((item, idx) => (
+                      {configItems.slice(0, 2).map((item, cIdx) => (
                         <span
-                          key={idx}
+                          key={cIdx}
                           className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300"
                         >
                           {item}
@@ -338,8 +356,8 @@ export default function Dashboard({
                 </div>
 
                 <div className="mt-5 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                  <div className="flex items-center gap-3">
-                    <span className="inline-flex items-center gap-1 font-medium text-slate-600 dark:text-slate-300">
+                  <div className="flex items-center gap-3 tabular-nums">
+                    <span className="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
                       <Users className="h-3.5 w-3.5 text-slate-400" />
                       {participantCount}{' '}
                       {participantCount === 1 ? 'jugador' : 'jugadores'}
@@ -349,7 +367,7 @@ export default function Dashboard({
                     </span>
                   </div>
 
-                  <span className="inline-flex items-center gap-0.5 font-semibold text-emerald-600 dark:text-emerald-400">
+                  <span className="inline-flex items-center gap-0.5 font-bold text-emerald-600 dark:text-emerald-400">
                     <span>Entrar</span>
                     <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
                   </span>
@@ -360,7 +378,7 @@ export default function Dashboard({
                     Creado el {formatShortDate(tournament.created_at)}
                   </p>
                 )}
-              </button>
+              </motion.button>
             );
           })}
         </div>

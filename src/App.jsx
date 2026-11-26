@@ -7,6 +7,7 @@ import Dashboard from './components/Dashboard';
 import InviteModal from './components/InviteModal';
 import Navbar from './components/Navbar';
 import ProfileModal from './components/ProfileModal';
+import { ToastProvider } from './components/ToastProvider';
 import TournamentView from './components/TournamentView';
 
 const THEME_STORAGE_KEY = 'torneoclub-theme';
@@ -71,6 +72,11 @@ export default function App() {
       root.classList.remove('dark');
     }
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+
+    const metaTheme = document.querySelector('meta[name="theme-color"]');
+    if (metaTheme) {
+      metaTheme.setAttribute('content', isDark ? '#050811' : '#059669');
+    }
   }, [isDark, theme]);
 
   function toggleTheme() {
@@ -94,7 +100,6 @@ export default function App() {
       return;
     }
 
-    // Fallback seguro si el perfil recién se creó o faltaba
     const fallbackName =
       user.user_metadata?.display_name ||
       user.user_metadata?.full_name ||
@@ -233,97 +238,100 @@ export default function App() {
 
   return (
     <MotionConfig reducedMotion="user">
-      <div className="relative min-h-screen selection:bg-emerald-500/25 selection:text-emerald-700 dark:selection:text-emerald-200">
-        {/* Fondo ambiental dinámico según el modo */}
-        <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
-          <motion.div
-            animate={{
-              opacity: isDark ? 0.35 : 0.65,
-              scale: isDark ? 1.05 : 1,
-            }}
-            transition={{ duration: 0.7 }}
-            className="absolute -top-36 left-1/2 h-[420px] w-[780px] -translate-x-1/2 rounded-full bg-radial from-emerald-400/25 via-teal-300/10 to-transparent blur-3xl dark:from-emerald-500/25 dark:via-cyan-500/10"
-          />
-          <motion.div
-            animate={{
-              opacity: isDark ? 0.28 : 0.45,
-            }}
-            transition={{ duration: 0.7 }}
-            className="absolute right-[-10%] bottom-[-15%] h-[380px] w-[520px] rounded-full bg-radial from-sky-400/20 via-indigo-400/10 to-transparent blur-3xl dark:from-indigo-500/25 dark:via-violet-500/10"
-          />
-        </div>
+      <ToastProvider>
+        <div className="relative min-h-screen selection:bg-emerald-500/25 selection:text-emerald-700 dark:selection:text-emerald-200">
+          {/* Fondo ambiental + grilla tipo estadio */}
+          <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+            <div className="arena-grid-overlay absolute inset-0" />
+            <motion.div
+              animate={{
+                opacity: isDark ? 0.38 : 0.68,
+                scale: isDark ? 1.06 : 1,
+              }}
+              transition={{ duration: 0.7 }}
+              className="absolute -top-36 left-1/2 h-[420px] w-[780px] -translate-x-1/2 rounded-full bg-radial from-emerald-400/25 via-teal-300/10 to-transparent blur-3xl dark:from-emerald-500/25 dark:via-cyan-500/10"
+            />
+            <motion.div
+              animate={{
+                opacity: isDark ? 0.3 : 0.45,
+              }}
+              transition={{ duration: 0.7 }}
+              className="absolute right-[-10%] bottom-[-15%] h-[380px] w-[520px] rounded-full bg-radial from-sky-400/20 via-indigo-400/10 to-transparent blur-3xl dark:from-indigo-500/25 dark:via-violet-500/10"
+            />
+          </div>
 
-        {!session?.user ? (
-          <AuthScreen
-            theme={theme}
-            onToggleTheme={toggleTheme}
-            inviteCode={pendingInviteCode}
-          />
-        ) : (
-          <>
-            <Navbar
-              user={session.user}
-              profile={profile}
-              onOpenProfile={() => setIsProfileModalOpen(true)}
-              onSignOut={handleSignOut}
-              signingOut={signingOut}
-              onGoHome={() => setSelectedTournamentId(null)}
+          {!session?.user ? (
+            <AuthScreen
               theme={theme}
               onToggleTheme={toggleTheme}
-            />
-
-            <AnimatePresence mode="wait">
-              {selectedTournamentId ? (
-                <motion.div
-                  key={`tournament-${selectedTournamentId}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.22, ease: 'easeOut' }}
-                >
-                  <TournamentView
-                    tournamentId={selectedTournamentId}
-                    user={session.user}
-                    profile={profile}
-                    onBack={() => setSelectedTournamentId(null)}
-                  />
-                </motion.div>
-              ) : (
-                <motion.div
-                  key="dashboard"
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.22, ease: 'easeOut' }}
-                >
-                  <Dashboard
-                    user={session.user}
-                    refreshTrigger={dashboardRefreshKey}
-                    onSelectTournament={(id) => setSelectedTournamentId(id)}
-                  />
-                </motion.div>
-              )}
-            </AnimatePresence>
-
-            <ProfileModal
-              isOpen={isProfileModalOpen}
-              user={session.user}
-              profile={profile}
-              onClose={() => setIsProfileModalOpen(false)}
-              onSaved={(updatedProfile) => setProfile(updatedProfile)}
-            />
-
-            <InviteModal
-              isOpen={Boolean(pendingInviteCode)}
               inviteCode={pendingInviteCode}
-              user={session.user}
-              profile={profile}
-              onClose={clearPendingInvite}
-              onJoined={handleInviteJoined}
             />
-          </>
-        )}
-      </div>
+          ) : (
+            <>
+              <Navbar
+                user={session.user}
+                profile={profile}
+                onOpenProfile={() => setIsProfileModalOpen(true)}
+                onSignOut={handleSignOut}
+                signingOut={signingOut}
+                onGoHome={() => setSelectedTournamentId(null)}
+                theme={theme}
+                onToggleTheme={toggleTheme}
+              />
+
+              <AnimatePresence mode="wait">
+                {selectedTournamentId ? (
+                  <motion.div
+                    key={`tournament-${selectedTournamentId}`}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                  >
+                    <TournamentView
+                      tournamentId={selectedTournamentId}
+                      user={session.user}
+                      profile={profile}
+                      onBack={() => setSelectedTournamentId(null)}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="dashboard"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.22, ease: 'easeOut' }}
+                  >
+                    <Dashboard
+                      user={session.user}
+                      refreshTrigger={dashboardRefreshKey}
+                      onSelectTournament={(id) => setSelectedTournamentId(id)}
+                    />
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <ProfileModal
+                isOpen={isProfileModalOpen}
+                user={session.user}
+                profile={profile}
+                onClose={() => setIsProfileModalOpen(false)}
+                onSaved={(updatedProfile) => setProfile(updatedProfile)}
+              />
+
+              <InviteModal
+                isOpen={Boolean(pendingInviteCode)}
+                inviteCode={pendingInviteCode}
+                user={session.user}
+                profile={profile}
+                onClose={clearPendingInvite}
+                onJoined={handleInviteJoined}
+              />
+            </>
+          )}
+        </div>
+      </ToastProvider>
     </MotionConfig>
   );
 }
