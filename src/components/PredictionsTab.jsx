@@ -13,6 +13,7 @@ import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
   buildProdeWhatsAppText,
   computeProdeLeaderboard,
+  formatProdePoints,
   getPollTargetDetails,
 } from '../utils/predictionsEngine';
 import Avatar from './Avatar';
@@ -218,7 +219,7 @@ export default function PredictionsTab({
             <span>Prode &amp; Encuestas de Predicción</span>
           </h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Puntaje independiente de la tabla principal del torneo.
+            Clásico (marcador exacto 3/1) y Encuestas dinámicas según votos (tabla aparte).
           </p>
         </div>
 
@@ -230,7 +231,7 @@ export default function PredictionsTab({
             className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2 text-xs font-bold text-white shadow-sm shadow-emerald-600/20"
           >
             <Plus className="h-4 w-4" />
-            <span>Nueva encuesta</span>
+            <span>Nueva predicción</span>
           </motion.button>
         )}
       </div>
@@ -255,7 +256,7 @@ export default function PredictionsTab({
               />
             )}
             <span className="relative z-10">
-              Encuestas ({pollItems.length})
+              Predicciones ({pollItems.length})
             </span>
           </button>
 
@@ -283,7 +284,8 @@ export default function PredictionsTab({
           <div className="inline-flex items-center gap-2 rounded-full border border-amber-200/80 bg-amber-50/80 px-3 py-1.5 text-xs font-bold text-amber-900 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-200">
             <Crown className="h-3.5 w-3.5 text-amber-500" />
             <span>
-              Líder Prode: {prodeLeader.participant.name} ({prodeLeader.points} pts)
+              Líder Prode: {prodeLeader.participant.name} (
+              {formatProdePoints(prodeLeader.points)} pts)
             </span>
           </div>
         )}
@@ -315,12 +317,12 @@ export default function PredictionsTab({
                 <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-12 text-center dark:border-slate-800 dark:bg-slate-900/40">
                   <Target className="mx-auto mb-3 h-8 w-8 text-slate-400" />
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Todavía no hay encuestas de Prode
+                    Todavía no hay predicciones ni encuestas
                   </h3>
                   <p className="mx-auto mt-1 max-w-md text-xs text-slate-500 dark:text-slate-400">
                     {isAdmin
-                      ? 'Crea una encuesta sobre un partido pendiente o sobre el campeón de un subtorneo para que todos empiecen a sumar puntos.'
-                      : 'Los administradores todavía no publicaron encuestas de predicción.'}
+                      ? 'Crea un Prode Clásico (marcador exacto 3/1) sobre partidos o una Encuesta dinámica sobre subtorneos para empezar a competir.'
+                      : 'Los administradores todavía no publicaron predicciones.'}
                   </p>
                 </div>
               ) : (
@@ -410,7 +412,7 @@ export default function PredictionsTab({
                           <th className="px-2.5 py-3 text-center" title="Encuestas resueltas votadas">
                             Res.
                           </th>
-                          <th className="px-2.5 py-3 text-center" title="Aciertos plenos (exacto / campeón)">
+                          <th className="px-2.5 py-3 text-center" title="Aciertos plenos (exacto / encuesta)">
                             Plenos
                           </th>
                           <th className="hidden px-2.5 py-3 text-center sm:table-cell" title="Total aciertos">
@@ -493,7 +495,7 @@ export default function PredictionsTab({
                               <td className="px-4 py-2.5 text-right">
                                 <span className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/15 px-2.5 py-1 text-sm font-black text-emerald-700 dark:text-emerald-300">
                                   <Trophy className="h-3.5 w-3.5" />
-                                  {row.points}
+                                  {formatProdePoints(row.points)}
                                 </span>
                               </td>
                             </tr>

@@ -1,6 +1,15 @@
 import { resolveParticipantAvatar } from './avatarUpload';
 import { resolveMatchOutcome } from './tournamentStatsEngine';
 
+function round1(value) {
+  return Math.round(Number(value) * 10) / 10;
+}
+
+export function formatProdePoints(value) {
+  const num = Number(value) || 0;
+  return Number.isInteger(num) ? String(num) : num.toFixed(1);
+}
+
 function getEntryAvatarUrl(entry, subEntryMembers, participantMap) {
   if (!entry) return null;
   const members = subEntryMembers.filter((em) => em.entry_id === entry.id);
@@ -141,7 +150,79 @@ export function getPollTargetDetails(
   return null;
 }
 
-export function evaluateVote(poll, vote, targetDetails) {
+/**
+ * Calcula cuotas dinámicas según popularidad para encuestas ('winner' o 'champion'):
+ * La opción más elegida entrega menos puntos (hasta minPts) y la menos elegida más (hasta maxPts).
+ */
+export function computePollOptionStats(poll, votes = [], targetDetails = null) {
+  if (!poll || poll.prediction_mode === 'exact_score') {
+    return null;
+  }
+
+  const minPts = Math.max(0, Number(poll.points_outcome ?? 1));
+  const rawMax =
+    poll.prediction_mode === 'champion'
+      ? Number(poll.points_champion ?? 5)
+      : Number(poll.points_exact ?? 5);
+  const maxPts = Math.max(minPts, rawMax);
+
+  const optionKeys = [];
+  if (poll.prediction_mode === 'winner') {
+    optionKeys.push('a');
+    if (poll.allow_draw) optionKeys.push('draw');
+    optionKeys.push('b');
+  } else if (poll.prediction_mode === 'champion' && targetDetails?.entries) {
+    targetDetails.entries.forEach((e) => optionKeys.push(e.id));
+  }
+
+  const counts = new Map();
+  optionKeys.forEach((k) => counts.set(k, 0));
+
+  votes.forEach((v) => {
+    const key =
+      poll.prediction_mode === 'champion'
+        ? v.predicted_entry_id
+        : v.predicted_outcome;
+    if (!key) return;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  const totalVotes = votes.length;
+  const byOption = new Map();
+
+  counts.forEach((count, key) => {
+    const share = totalVotes > 0 ? count / totalVotes : 0;
+    const pct = totalVotes > 0 ? Math.round(share * 100) : 0;
+    const currentPoints =
+      totalVotes > 0 && count > 0
+        ? round1(minPts + (maxPts - minPts) * (1 - share))
+        : maxPts;
+
+    byOption.set(key, {
+      count,
+      pct,
+      currentPoints,
+    });
+  });
+
+  return {
+    totalVotes,
+    minPts,
+    maxPts,
+    byOption,
+    getProjectedPoints(key, myCurrentVoteKey) {
+      const count = counts.get(key) || 0;
+      if (myCurrentVoteKey === key) {
+        return byOption.get(key)?.currentPoints ?? maxPts;
+      }
+      const nextTotal = myCurrentVoteKey ? Math.max(1, totalVotes) : totalVotes + 1;
+      const nextCount = count + 1;
+      return round1(minPts + (maxPts - minPts) * (1 - nextCount / nextTotal));
+    },
+  };
+}
+
+export function evaluateVote(poll, vote, targetDetails, optionStats = null) {
   if (!poll || !vote || !targetDetails || !targetDetails.isCompleted) {
     return {
       resolved: false,
@@ -152,14 +233,27 @@ export function evaluateVote(poll, vote, targetDetails) {
     };
   }
 
+  // Tipo 2A: Encuesta de Campeón de Subtorneo (cuotas dinámicas)
   if (poll.prediction_mode === 'champion') {
     const hit = targetDetails.championEntryIds.includes(vote.predicted_entry_id);
+    if (!hit) {
+      return {
+        resolved: true,
+        points: 0,
+        fullHit: false,
+        outcomeHit: false,
+        status: 'miss',
+      };
+    }
+    const dynamicPts =
+      optionStats?.byOption?.get(vote.predicted_entry_id)?.currentPoints ??
+      Number(poll.points_champion || 5);
     return {
       resolved: true,
-      points: hit ? Number(poll.points_champion || 0) : 0,
-      fullHit: hit,
-      outcomeHit: hit,
-      status: hit ? 'exact' : 'miss',
+      points: dynamicPts,
+      fullHit: true,
+      outcomeHit: true,
+      status: 'exact',
     };
   }
 
@@ -173,18 +267,31 @@ export function evaluateVote(poll, vote, targetDetails) {
     };
   }
 
+  // Tipo 2B: Encuesta de Ganador / Empate en cruce directo (cuotas dinámicas)
   if (poll.prediction_mode === 'winner') {
     const hit = vote.predicted_outcome === targetDetails.actualOutcome;
+    if (!hit) {
+      return {
+        resolved: true,
+        points: 0,
+        fullHit: false,
+        outcomeHit: false,
+        status: 'miss',
+      };
+    }
+    const dynamicPts =
+      optionStats?.byOption?.get(vote.predicted_outcome)?.currentPoints ??
+      Number(poll.points_outcome || 1);
     return {
       resolved: true,
-      points: hit ? Number(poll.points_outcome || 0) : 0,
-      fullHit: hit,
-      outcomeHit: hit,
-      status: hit ? 'exact' : 'miss',
+      points: dynamicPts,
+      fullHit: true,
+      outcomeHit: true,
+      status: 'exact',
     };
   }
 
-  // Modo 'exact_score'
+  // Tipo 1: Prode Clásico (Marcador Exacto: 3 pts exacto, 1 pt ganador/empate)
   const sA = vote.predicted_score_a;
   const sB = vote.predicted_score_b;
   const voteOutcome =
@@ -205,7 +312,7 @@ export function evaluateVote(poll, vote, targetDetails) {
   ) {
     return {
       resolved: true,
-      points: Number(poll.points_exact || 0),
+      points: Number(poll.points_exact ?? 3),
       fullHit: true,
       outcomeHit: true,
       status: 'exact',
@@ -215,7 +322,7 @@ export function evaluateVote(poll, vote, targetDetails) {
   if (voteOutcome && voteOutcome === targetDetails.actualOutcome) {
     return {
       resolved: true,
-      points: Number(poll.points_outcome || 0),
+      points: Number(poll.points_outcome ?? 1),
       fullHit: false,
       outcomeHit: true,
       status: 'outcome',
@@ -242,25 +349,34 @@ export function computeProdeLeaderboard({
   participantMap = new Map(),
   subEntryMembers = [],
 }) {
+  const votesByPollId = new Map();
+  votes.forEach((v) => {
+    if (!votesByPollId.has(v.poll_id)) votesByPollId.set(v.poll_id, []);
+    votesByPollId.get(v.poll_id).push(v);
+  });
+
   const targetDetailsByPollId = new Map();
+  const optionStatsByPollId = new Map();
+
   polls.forEach((poll) => {
-    targetDetailsByPollId.set(
+    const target = getPollTargetDetails(poll, {
+      matches,
+      subMatches,
+      subtournaments,
+      subEntries,
+      participantMap,
+      subEntryMembers,
+    });
+    targetDetailsByPollId.set(poll.id, target);
+    optionStatsByPollId.set(
       poll.id,
-      getPollTargetDetails(poll, {
-        matches,
-        subMatches,
-        subtournaments,
-        subEntries,
-        participantMap,
-        subEntryMembers,
-      })
+      computePollOptionStats(poll, votesByPollId.get(poll.id) || [], target)
     );
   });
 
   const pollMap = new Map(polls.map((p) => [p.id, p]));
   const rowsMap = new Map();
 
-  // Incluir todos los participantes con cuenta vinculada (y/o que hayan votado)
   participants.forEach((p) => {
     if (p.user_id) {
       rowsMap.set(p.id, {
@@ -297,11 +413,12 @@ export function computeProdeLeaderboard({
 
     const poll = pollMap.get(vote.poll_id);
     const target = targetDetailsByPollId.get(vote.poll_id);
-    const evalRes = evaluateVote(poll, vote, target);
+    const optStats = optionStatsByPollId.get(vote.poll_id);
+    const evalRes = evaluateVote(poll, vote, target, optStats);
 
     if (evalRes.resolved) {
       row.resolvedVotes += 1;
-      row.points += evalRes.points;
+      row.points = round1(row.points + evalRes.points);
       if (evalRes.fullHit) row.fullHits += 1;
       else if (evalRes.outcomeHit) row.outcomeHits += 1;
       if (evalRes.outcomeHit || evalRes.fullHit) row.totalHits += 1;
@@ -345,7 +462,9 @@ export function buildProdeWhatsAppText(tournament, leaderboard = []) {
         ? '🥉 '
         : `${row.rank}. `;
     lines.push(
-      `${medal}*${row.participant.name}* — *${row.points} pts* (${row.fullHits} plenos · ${row.effectivenessPct}% efect.)`
+      `${medal}*${row.participant.name}* — *${formatProdePoints(
+        row.points
+      )} pts* (${row.fullHits} plenos · ${row.effectivenessPct}% efect.)`
     );
   });
 

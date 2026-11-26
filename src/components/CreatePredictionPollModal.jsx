@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertCircle, Loader2, Target, X } from 'lucide-react';
+import { AlertCircle, Flame, Loader2, Target, Trophy, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function CreatePredictionPollModal({
@@ -45,6 +45,21 @@ export default function CreatePredictionPollModal({
       ),
     [matches, usedMatchIds]
   );
+
+  const availableRounds = useMemo(() => {
+    const map = new Map();
+    availableMatches.forEach((m) => {
+      if (!map.has(m.round_number)) {
+        map.set(m.round_number, {
+          roundNumber: m.round_number,
+          roundName: m.round_name,
+          matches: [],
+        });
+      }
+      map.get(m.round_number).matches.push(m);
+    });
+    return Array.from(map.values()).sort((a, b) => a.roundNumber - b.roundNumber);
+  }, [availableMatches]);
 
   const activeSubMap = useMemo(
     () =>
@@ -92,14 +107,24 @@ export default function CreatePredictionPollModal({
       }));
   }, [subMatches, subEntries, activeSubMap, usedSubMatchIds]);
 
+  // 'classic' (marcador exacto 3/1) | 'survey' (encuesta con cuotas dinámicas)
+  const [prodeKind, setProdeKind] = useState('classic');
+  // Para 'classic': 'match' | 'subtournament_match'
+  // Para 'survey': 'subtournament_winner' | 'match' | 'subtournament_match'
   const [pollType, setPollType] = useState('match');
+  const [createBatchRound, setCreateBatchRound] = useState(false);
+  const [selectedRoundNumber, setSelectedRoundNumber] = useState('');
   const [targetId, setTargetId] = useState('');
-  const [predictionMode, setPredictionMode] = useState('exact_score');
   const [title, setTitle] = useState('');
   const [allowDraw, setAllowDraw] = useState(true);
-  const [pointsOutcome, setPointsOutcome] = useState('1');
+
+  // Puntaje Clásico
   const [pointsExact, setPointsExact] = useState('3');
-  const [pointsChampion, setPointsChampion] = useState('5');
+  const [pointsOutcome, setPointsOutcome] = useState('1');
+
+  // Puntaje Encuesta (dinámico por popularidad)
+  const [surveyMinPts, setSurveyMinPts] = useState('1');
+  const [surveyMaxPts, setSurveyMaxPts] = useState('5');
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -107,38 +132,44 @@ export default function CreatePredictionPollModal({
   useEffect(() => {
     if (!isOpen) return;
     setError('');
-    setPointsOutcome('1');
+    setCreateBatchRound(false);
     setPointsExact('3');
-    setPointsChampion('5');
+    setPointsOutcome('1');
+    setSurveyMinPts('1');
+    setSurveyMaxPts('5');
     setAllowDraw(tournament?.format !== 'knockout');
 
     if (isCustom) {
-      if (availableSubMatches.length > 0 && availableSubtournaments.length === 0) {
-        setPollType('subtournament_match');
-        setTargetId(availableSubMatches[0].id);
-        setPredictionMode('exact_score');
-      } else {
+      if (availableSubtournaments.length > 0) {
+        setProdeKind('survey');
         setPollType('subtournament_winner');
-        setTargetId(availableSubtournaments[0]?.id || '');
-        setPredictionMode('champion');
+        setTargetId(availableSubtournaments[0].id);
+      } else {
+        setProdeKind('classic');
+        setPollType('subtournament_match');
+        setTargetId(availableSubMatches[0]?.id || '');
       }
     } else {
+      setProdeKind('classic');
       setPollType('match');
       setTargetId(availableMatches[0]?.id || '');
-      setPredictionMode('exact_score');
+      setSelectedRoundNumber(
+        availableRounds[0] ? String(availableRounds[0].roundNumber) : ''
+      );
     }
   }, [
     isOpen,
     isCustom,
     tournament?.format,
     availableMatches,
+    availableRounds,
     availableSubMatches,
     availableSubtournaments,
   ]);
 
-  // Autocompletar título sugerido al cambiar objetivo
+  // Autocompletar título sugerido
   useEffect(() => {
-    if (!isOpen || !targetId) {
+    if (!isOpen || createBatchRound || !targetId) {
       setTitle('');
       return;
     }
@@ -158,11 +189,12 @@ export default function CreatePredictionPollModal({
     } else if (pollType === 'subtournament_winner') {
       const s = availableSubtournaments.find((item) => item.id === targetId);
       if (s) {
-        setTitle(`Campeón de "${s.name}"`);
+        setTitle(`¿Quién gana "${s.name}"?`);
       }
     }
   }, [
     isOpen,
+    createBatchRound,
     pollType,
     targetId,
     availableMatches,
@@ -171,17 +203,44 @@ export default function CreatePredictionPollModal({
     participantMap,
   ]);
 
+  function handleSelectProdeKind(nextKind) {
+    setProdeKind(nextKind);
+    setError('');
+    setCreateBatchRound(false);
+
+    if (nextKind === 'classic') {
+      const nextType = isCustom ? 'subtournament_match' : 'match';
+      setPollType(nextType);
+      setTargetId(
+        nextType === 'match'
+          ? availableMatches[0]?.id || ''
+          : availableSubMatches[0]?.id || ''
+      );
+    } else {
+      if (isCustom) {
+        if (availableSubtournaments.length > 0) {
+          setPollType('subtournament_winner');
+          setTargetId(availableSubtournaments[0].id);
+        } else {
+          setPollType('subtournament_match');
+          setTargetId(availableSubMatches[0]?.id || '');
+        }
+      } else {
+        setPollType('match');
+        setTargetId(availableMatches[0]?.id || '');
+      }
+    }
+  }
+
   function handleChangePollType(nextType) {
     setPollType(nextType);
     setError('');
+    setCreateBatchRound(false);
     if (nextType === 'subtournament_winner') {
-      setPredictionMode('champion');
       setTargetId(availableSubtournaments[0]?.id || '');
     } else if (nextType === 'subtournament_match') {
-      setPredictionMode('exact_score');
       setTargetId(availableSubMatches[0]?.id || '');
     } else {
-      setPredictionMode('exact_score');
       setTargetId(availableMatches[0]?.id || '');
     }
   }
@@ -190,38 +249,84 @@ export default function CreatePredictionPollModal({
     e.preventDefault();
     if (!tournament?.id || !currentUserId) return;
 
-    const cleanTitle = title.trim();
-    if (!targetId) {
-      setError('No hay ningún partido o subtorneo pendiente disponible.');
-      return;
-    }
-    if (!cleanTitle) {
-      setError('Ingresa un título para la encuesta.');
-      return;
-    }
+    const isClassic = prodeKind === 'classic';
+    const predictionMode = isClassic
+      ? 'exact_score'
+      : pollType === 'subtournament_winner'
+      ? 'champion'
+      : 'winner';
 
-    const pOutcome = Math.max(0, Number.parseInt(pointsOutcome || '1', 10) || 0);
     const pExact = Math.max(0, Number.parseInt(pointsExact || '3', 10) || 0);
-    const pChampion = Math.max(0, Number.parseInt(pointsChampion || '5', 10) || 0);
+    const pOutcome = Math.max(0, Number.parseInt(pointsOutcome || '1', 10) || 0);
+    const minP = Math.max(1, Number.parseInt(surveyMinPts || '1', 10) || 1);
+    const maxP = Math.max(minP, Number.parseInt(surveyMaxPts || '5', 10) || minP);
 
     setSaving(true);
     setError('');
 
     try {
+      // Creación masiva de toda una fecha (solo para partidos estándar)
+      if (!isCustom && pollType === 'match' && createBatchRound) {
+        const roundGroup = availableRounds.find(
+          (r) => String(r.roundNumber) === String(selectedRoundNumber)
+        );
+        if (!roundGroup || roundGroup.matches.length === 0) {
+          throw new Error('No hay partidos pendientes disponibles en esa fecha.');
+        }
+
+        const payloads = roundGroup.matches.map((m) => {
+          const nA = participantMap.get(m.participant_a_id)?.name || 'A';
+          const nB = participantMap.get(m.participant_b_id)?.name || 'B';
+          return {
+            tournament_id: tournament.id,
+            title: `${m.round_name}: ${nA} vs ${nB}`,
+            poll_type: 'match',
+            prediction_mode: predictionMode,
+            match_id: m.id,
+            subtournament_match_id: null,
+            subtournament_id: null,
+            allow_draw: Boolean(allowDraw),
+            points_outcome: isClassic ? pOutcome : minP,
+            points_exact: isClassic ? pExact : maxP,
+            points_champion: maxP,
+            status: 'open',
+            created_by: currentUserId,
+          };
+        });
+
+        const { data, error: batchError } = await supabase
+          .from('prediction_polls')
+          .insert(payloads)
+          .select();
+
+        if (batchError) throw batchError;
+        if (onCreated) onCreated(data);
+        onClose();
+        return;
+      }
+
+      if (!targetId) {
+        throw new Error('No hay ningún evento pendiente disponible.');
+      }
+
+      const cleanTitle = title.trim();
+      if (!cleanTitle) {
+        throw new Error('Ingresa un título para la encuesta.');
+      }
+
       const payload = {
         tournament_id: tournament.id,
         title: cleanTitle,
         poll_type: pollType,
-        prediction_mode:
-          pollType === 'subtournament_winner' ? 'champion' : predictionMode,
+        prediction_mode: predictionMode,
         match_id: pollType === 'match' ? targetId : null,
         subtournament_match_id: pollType === 'subtournament_match' ? targetId : null,
         subtournament_id: pollType === 'subtournament_winner' ? targetId : null,
         allow_draw:
           pollType === 'subtournament_winner' ? false : Boolean(allowDraw),
-        points_outcome: pOutcome,
-        points_exact: pExact,
-        points_champion: pChampion,
+        points_outcome: isClassic ? pOutcome : minP,
+        points_exact: isClassic ? pExact : maxP,
+        points_champion: maxP,
         status: 'open',
         created_by: currentUserId,
       };
@@ -233,11 +338,10 @@ export default function CreatePredictionPollModal({
         .single();
 
       if (insertError) throw insertError;
-
       if (onCreated) onCreated(data);
       onClose();
     } catch (err) {
-      setError(err?.message || 'No se pudo crear la encuesta de predicción.');
+      setError(err?.message || 'No se pudo crear la predicción.');
     } finally {
       setSaving(false);
     }
@@ -246,7 +350,9 @@ export default function CreatePredictionPollModal({
   if (typeof document === 'undefined') return null;
 
   const hasTargets =
-    pollType === 'match'
+    !isCustom && pollType === 'match' && createBatchRound
+      ? availableRounds.length > 0
+      : pollType === 'match'
       ? availableMatches.length > 0
       : pollType === 'subtournament_match'
       ? availableSubMatches.length > 0
@@ -279,10 +385,10 @@ export default function CreatePredictionPollModal({
                 </div>
                 <div>
                   <h2 className="text-base font-extrabold text-slate-900 dark:text-white">
-                    Nueva encuesta de Prode
+                    Nueva predicción / encuesta
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Se cierra automáticamente al completarse el evento
+                    Elegí Prode Clásico o Encuesta con cuotas por popularidad
                   </p>
                 </div>
               </div>
@@ -299,10 +405,55 @@ export default function CreatePredictionPollModal({
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isCustom && (
+              {/* Selector de los 2 tipos de Prode */}
+              <div>
+                <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                  Tipo de Prode
+                </span>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProdeKind('classic')}
+                    className={`flex min-h-[44px] flex-col items-start rounded-2xl border p-3 text-left transition ${
+                      prodeKind === 'classic'
+                        ? 'border-emerald-500 bg-emerald-50/70 dark:border-emerald-400 dark:bg-emerald-500/15'
+                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-white">
+                      <Trophy className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Prode Clásico</span>
+                    </span>
+                    <span className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                      Marcador exacto: +3 pts exacto, +1 pt ganador o empate
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSelectProdeKind('survey')}
+                    className={`flex min-h-[44px] flex-col items-start rounded-2xl border p-3 text-left transition ${
+                      prodeKind === 'survey'
+                        ? 'border-violet-500 bg-violet-50/70 dark:border-violet-400 dark:bg-violet-500/15'
+                        : 'border-slate-200 bg-white hover:border-slate-300 dark:border-slate-700 dark:bg-slate-900'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-white">
+                      <Flame className="h-3.5 w-3.5 text-violet-600 dark:text-violet-400" />
+                      <span>Tipo Encuesta</span>
+                    </span>
+                    <span className="mt-1 text-[11px] leading-snug text-slate-500 dark:text-slate-400">
+                      Elegís ganador/campeón: la más votada da menos puntos
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Alcance cuando es modo Custom y Tipo Encuesta */}
+              {isCustom && prodeKind === 'survey' && (
                 <div>
                   <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                    Tipo de predicción
+                    ¿Sobre qué se vota?
                   </span>
                   <div className="grid grid-cols-2 gap-2">
                     <button
@@ -310,7 +461,7 @@ export default function CreatePredictionPollModal({
                       onClick={() => handleChangePollType('subtournament_winner')}
                       className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
                         pollType === 'subtournament_winner'
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                          ? 'border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-500/20 dark:text-violet-200'
                           : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
                       }`}
                     >
@@ -322,7 +473,7 @@ export default function CreatePredictionPollModal({
                       onClick={() => handleChangePollType('subtournament_match')}
                       className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
                         pollType === 'subtournament_match'
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                          ? 'border-violet-500 bg-violet-50 text-violet-900 dark:bg-violet-500/20 dark:text-violet-200'
                           : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
                       }`}
                     >
@@ -332,12 +483,43 @@ export default function CreatePredictionPollModal({
                 </div>
               )}
 
+              {/* Opción de carga masiva por fecha en Liga / Eliminatoria */}
+              {!isCustom && availableRounds.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCreateBatchRound(false)}
+                    className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                      !createBatchRound
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    Un partido puntual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateBatchRound(true)}
+                    className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
+                      createBatchRound
+                        ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
+                        : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                    }`}
+                  >
+                    Toda una fecha / ronda
+                  </button>
+                </div>
+              )}
+
+              {/* Selector de objetivo */}
               <div>
                 <label
                   htmlFor="poll-target"
                   className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
                 >
-                  {pollType === 'subtournament_winner'
+                  {!isCustom && createBatchRound
+                    ? 'Selecciona la fecha / ronda'
+                    : pollType === 'subtournament_winner'
                     ? 'Subtorneo a predecir'
                     : 'Enfrentamiento pendiente'}
                 </label>
@@ -345,9 +527,23 @@ export default function CreatePredictionPollModal({
                 {!hasTargets ? (
                   <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/80 p-3.5 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
                     {pollType === 'subtournament_winner'
-                      ? 'No hay subtorneos activos con al menos 2 participantes sin encuesta.'
+                      ? 'No hay subtorneos activos con al menos 2 competidores sin encuesta.'
                       : 'No hay partidos pendientes con ambos rivales definidos y sin encuesta previa.'}
                   </div>
+                ) : !isCustom && createBatchRound ? (
+                  <select
+                    id="poll-target"
+                    value={selectedRoundNumber}
+                    onChange={(e) => setSelectedRoundNumber(e.target.value)}
+                    className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base font-semibold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  >
+                    {availableRounds.map((r) => (
+                      <option key={r.roundNumber} value={r.roundNumber}>
+                        {r.roundName} ({r.matches.length}{' '}
+                        {r.matches.length === 1 ? 'partido' : 'partidos'})
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <select
                     id="poll-target"
@@ -381,101 +577,55 @@ export default function CreatePredictionPollModal({
                 )}
               </div>
 
-              <div>
-                <label
-                  htmlFor="poll-title"
-                  className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
-                >
-                  Título de la encuesta
-                </label>
-                <input
-                  id="poll-title"
-                  type="text"
-                  maxLength={100}
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Ej: Final: Juan vs Pedro"
-                  className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base font-medium text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
-                />
-              </div>
-
-              {pollType !== 'subtournament_winner' && (
-                <>
-                  <div>
-                    <span className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                      Modo de predicción
-                    </span>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPredictionMode('exact_score')}
-                        className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
-                          predictionMode === 'exact_score'
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
-                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                        }`}
-                      >
-                        Marcador exacto
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setPredictionMode('winner')}
-                        className={`min-h-[44px] rounded-xl border px-3 py-2 text-xs font-bold transition ${
-                          predictionMode === 'winner'
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-200'
-                            : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
-                        }`}
-                      >
-                        Solo Ganador / Empate
-                      </button>
-                    </div>
-                  </div>
-
-                  <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
-                    <input
-                      type="checkbox"
-                      checked={allowDraw}
-                      onChange={(e) => setAllowDraw(e.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300 text-emerald-600"
-                    />
-                    <span>Permitir predecir empate</span>
+              {(!createBatchRound || isCustom) && (
+                <div>
+                  <label
+                    htmlFor="poll-title"
+                    className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
+                  >
+                    Título visible
                   </label>
-                </>
+                  <input
+                    id="poll-title"
+                    type="text"
+                    maxLength={100}
+                    required
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Ej: Final: Juan vs Pedro"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base font-medium text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+                  />
+                </div>
               )}
 
-              {/* Sistema de puntaje configurable */}
+              {pollType !== 'subtournament_winner' && (
+                <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-200">
+                  <input
+                    type="checkbox"
+                    checked={allowDraw}
+                    onChange={(e) => setAllowDraw(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                  />
+                  <span>Permitir predecir empate</span>
+                </label>
+              )}
+
+              {/* Configuración de puntaje según el tipo */}
               <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 dark:border-slate-800 dark:bg-slate-900/60">
                 <p className="mb-2.5 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
-                  Puntaje de la encuesta
+                  {prodeKind === 'classic'
+                    ? 'Puntaje Prode Clásico'
+                    : 'Rango de puntaje dinámico (según votos)'}
                 </p>
 
-                {pollType === 'subtournament_winner' ? (
-                  <div>
-                    <label
-                      htmlFor="pts-champion"
-                      className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
-                    >
-                      Puntos por acertar campeón (1.º puesto)
-                    </label>
-                    <input
-                      id="pts-champion"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={pointsChampion}
-                      onChange={(e) => setPointsChampion(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-bold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
-                  </div>
-                ) : predictionMode === 'exact_score' ? (
+                {prodeKind === 'classic' ? (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label
                         htmlFor="pts-exact"
                         className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
                       >
-                        Marcador exacto (pleno)
+                        Marcador exacto
                       </label>
                       <input
                         id="pts-exact"
@@ -506,22 +656,46 @@ export default function CreatePredictionPollModal({
                     </div>
                   </div>
                 ) : (
-                  <div>
-                    <label
-                      htmlFor="pts-winner-only"
-                      className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
-                    >
-                      Puntos por acertar ganador / empate
-                    </label>
-                    <input
-                      id="pts-winner-only"
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={pointsOutcome}
-                      onChange={(e) => setPointsOutcome(e.target.value)}
-                      className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-bold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                    />
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label
+                          htmlFor="pts-survey-min"
+                          className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+                        >
+                          Mínimo (más votada)
+                        </label>
+                        <input
+                          id="pts-survey-min"
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={surveyMinPts}
+                          onChange={(e) => setSurveyMinPts(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-bold text-slate-900 focus:border-violet-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="pts-survey-max"
+                          className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+                        >
+                          Máximo (batacazo)
+                        </label>
+                        <input
+                          id="pts-survey-max"
+                          type="number"
+                          min={1}
+                          max={100}
+                          value={surveyMaxPts}
+                          onChange={(e) => setSurveyMaxPts(e.target.value)}
+                          className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-bold text-slate-900 focus:border-violet-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                        />
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Si el 80% vota a un favorito, dará cerca del mínimo; si acertás uno que casi nadie eligió, te llevás cerca del máximo.
+                    </p>
                   </div>
                 )}
               </div>
@@ -550,7 +724,13 @@ export default function CreatePredictionPollModal({
                   className="inline-flex min-h-[44px] items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 disabled:opacity-60"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <span>{saving ? 'Creando...' : 'Abrir encuesta'}</span>
+                  <span>
+                    {saving
+                      ? 'Creando...'
+                      : !isCustom && createBatchRound
+                      ? 'Abrir toda la fecha'
+                      : 'Abrir encuesta'}
+                  </span>
                 </motion.button>
               </div>
             </form>

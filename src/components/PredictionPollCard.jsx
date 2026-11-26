@@ -5,15 +5,21 @@ import {
   Check,
   CheckCircle2,
   Crown,
+  Flame,
   Loader2,
   Lock,
   LockOpen,
   Trash2,
+  Trophy,
   Users,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
-import { evaluateVote } from '../utils/predictionsEngine';
+import {
+  computePollOptionStats,
+  evaluateVote,
+  formatProdePoints,
+} from '../utils/predictionsEngine';
 import Avatar from './Avatar';
 
 export default function PredictionPollCard({
@@ -67,8 +73,18 @@ export default function PredictionPollCard({
 
   if (!targetDetails) return null;
 
+  const isClassic = poll.prediction_mode === 'exact_score';
   const isOpen = poll.status === 'open' && !targetDetails.isCompleted;
   const canVote = isOpen && Boolean(myLinkedParticipant);
+
+  const optionStats = !isClassic
+    ? computePollOptionStats(poll, votes, targetDetails)
+    : null;
+
+  const myCurrentKey =
+    poll.prediction_mode === 'champion'
+      ? myVote?.predicted_entry_id || null
+      : myVote?.predicted_outcome || null;
 
   async function saveVotePayload(fields) {
     if (!canVote) return;
@@ -181,14 +197,9 @@ export default function PredictionPollCard({
     }
   }
 
-  const myEval = myVote ? evaluateVote(poll, myVote, targetDetails) : null;
-
-  const scoringSummary =
-    poll.prediction_mode === 'champion'
-      ? `+${poll.points_champion} pts campeón`
-      : poll.prediction_mode === 'exact_score'
-      ? `+${poll.points_exact} pts exacto · +${poll.points_outcome} pts resultado`
-      : `+${poll.points_outcome} pts resultado`;
+  const myEval = myVote
+    ? evaluateVote(poll, myVote, targetDetails, optionStats)
+    : null;
 
   return (
     <motion.div
@@ -222,9 +233,21 @@ export default function PredictionPollCard({
               </span>
             )}
 
-            <span className="rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-              {scoringSummary}
-            </span>
+            {isClassic ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[11px] font-bold text-emerald-800 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300">
+                <Trophy className="h-3 w-3" />
+                <span>
+                  Clásico · +{poll.points_exact} exacto / +{poll.points_outcome} res.
+                </span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[11px] font-bold text-violet-800 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300">
+                <Flame className="h-3 w-3" />
+                <span>
+                  Encuesta dinámica ({optionStats?.minPts}–{optionStats?.maxPts} pts)
+                </span>
+              </span>
+            )}
 
             <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
               <Users className="h-3 w-3" />
@@ -320,14 +343,13 @@ export default function PredictionPollCard({
         </div>
       )}
 
-      {/* Aviso si el usuario no está vinculado a un participante */}
       {isOpen && !myLinkedParticipant && (
         <div className="mb-3 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs text-sky-800 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-200">
           Vincula tu cuenta a un participante del torneo en la lista lateral para emitir tu voto.
         </div>
       )}
 
-      {/* Zona de votación para partido directo */}
+      {/* Partido directo (Clásico o Encuesta) */}
       {targetDetails.kind === 'match' && (
         <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/45">
           <div className="mb-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2">
@@ -356,7 +378,7 @@ export default function PredictionPollCard({
             </div>
           </div>
 
-          {poll.prediction_mode === 'exact_score' ? (
+          {isClassic ? (
             <form onSubmit={handleSaveExactScore} className="space-y-2.5">
               <div className="flex items-center justify-center gap-3">
                 <input
@@ -408,89 +430,127 @@ export default function PredictionPollCard({
               )}
             </form>
           ) : (
-            <div
-              className={`grid gap-2 ${
-                poll.allow_draw ? 'grid-cols-3' : 'grid-cols-2'
-              }`}
-            >
-              <button
-                type="button"
-                disabled={!canVote || savingVote}
-                onClick={() => handleSelectWinner('a')}
-                className={`min-h-[44px] truncate rounded-xl border px-2.5 py-2 text-xs font-bold transition disabled:opacity-70 ${
-                  selectedOutcome === 'a'
-                    ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+            <div className="space-y-2">
+              <div
+                className={`grid gap-2 ${
+                  poll.allow_draw ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2'
                 }`}
               >
-                Gana {targetDetails.sideA.name}
-              </button>
+                {[
+                  { key: 'a', label: `Gana ${targetDetails.sideA.name}` },
+                  ...(poll.allow_draw ? [{ key: 'draw', label: 'Empate' }] : []),
+                  { key: 'b', label: `Gana ${targetDetails.sideB.name}` },
+                ].map((opt) => {
+                  const isSelected = selectedOutcome === opt.key;
+                  const stat = optionStats?.byOption.get(opt.key);
+                  const ptsPreview =
+                    isOpen && canVote && !isSelected
+                      ? optionStats?.getProjectedPoints(opt.key, myCurrentKey)
+                      : stat?.currentPoints ?? optionStats?.maxPts;
 
-              {poll.allow_draw && (
-                <button
-                  type="button"
-                  disabled={!canVote || savingVote}
-                  onClick={() => handleSelectWinner('draw')}
-                  className={`min-h-[44px] rounded-xl border px-2.5 py-2 text-xs font-bold transition disabled:opacity-70 ${
-                    selectedOutcome === 'draw'
-                      ? 'border-amber-500 bg-amber-500 text-white shadow-xs'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-amber-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                  }`}
-                >
-                  Empate
-                </button>
-              )}
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      disabled={!canVote || savingVote}
+                      onClick={() => handleSelectWinner(opt.key)}
+                      className={`relative flex min-h-[52px] flex-col items-start justify-between overflow-hidden rounded-xl border px-3 py-2 text-left transition disabled:opacity-80 ${
+                        isSelected
+                          ? 'border-violet-500 bg-violet-600 text-white shadow-xs'
+                          : 'border-slate-200 bg-white text-slate-700 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="truncate text-xs font-extrabold">
+                          {opt.label}
+                        </span>
+                        <span
+                          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-black ${
+                            isSelected
+                              ? 'bg-white/20 text-white'
+                              : 'bg-violet-100 text-violet-800 dark:bg-violet-500/20 dark:text-violet-300'
+                          }`}
+                        >
+                          +{formatProdePoints(ptsPreview)} pts
+                        </span>
+                      </div>
 
-              <button
-                type="button"
-                disabled={!canVote || savingVote}
-                onClick={() => handleSelectWinner('b')}
-                className={`min-h-[44px] truncate rounded-xl border px-2.5 py-2 text-xs font-bold transition disabled:opacity-70 ${
-                  selectedOutcome === 'b'
-                    ? 'border-emerald-500 bg-emerald-600 text-white shadow-xs'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                }`}
-              >
-                Gana {targetDetails.sideB.name}
-              </button>
+                      <div className="mt-1 flex w-full items-center justify-between text-[10px] opacity-85">
+                        <span>
+                          {stat?.count || 0}{' '}
+                          {(stat?.count || 0) === 1 ? 'voto' : 'votos'} ({stat?.pct || 0}%)
+                        </span>
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Los puntos se ajustan automáticamente según el % de votos al cierre de la encuesta.
+              </p>
             </div>
           )}
         </div>
       )}
 
-      {/* Zona de votación para campeón de subtorneo */}
+      {/* Encuesta de campeón de subtorneo (cuotas dinámicas) */}
       {targetDetails.kind === 'subtournament' && (
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          {targetDetails.entries.map((entry) => {
-            const isSelected = selectedEntryId === entry.id;
-            const isRealChamp = targetDetails.championEntryIds.includes(entry.id);
-            return (
-              <button
-                key={entry.id}
-                type="button"
-                disabled={!canVote || savingVote}
-                onClick={() => handleSelectChampion(entry.id)}
-                className={`flex min-h-[44px] items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left transition disabled:opacity-80 ${
-                  isSelected
-                    ? 'border-emerald-500 bg-emerald-50 text-emerald-900 dark:border-emerald-400 dark:bg-emerald-500/20 dark:text-emerald-200'
-                    : 'border-slate-200 bg-white text-slate-700 hover:border-emerald-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
-                }`}
-              >
-                <div className="flex min-w-0 items-center gap-2">
-                  <Avatar name={entry.name} url={entry.avatarUrl} size="xs" />
-                  <span className="truncate text-xs font-bold">{entry.name}</span>
-                </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {isRealChamp && <Crown className="h-3.5 w-3.5 text-amber-500" />}
-                  {isSelected && (
-                    <span className="rounded-full bg-emerald-600 p-0.5 text-white">
-                      <Check className="h-3 w-3" />
+        <div className="space-y-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {targetDetails.entries.map((entry) => {
+              const isSelected = selectedEntryId === entry.id;
+              const isRealChamp = targetDetails.championEntryIds.includes(entry.id);
+              const stat = optionStats?.byOption.get(entry.id);
+              const ptsPreview =
+                isOpen && canVote && !isSelected
+                  ? optionStats?.getProjectedPoints(entry.id, myCurrentKey)
+                  : stat?.currentPoints ?? optionStats?.maxPts;
+
+              return (
+                <button
+                  key={entry.id}
+                  type="button"
+                  disabled={!canVote || savingVote}
+                  onClick={() => handleSelectChampion(entry.id)}
+                  className={`flex min-h-[52px] flex-col justify-between rounded-xl border px-3 py-2 text-left transition disabled:opacity-80 ${
+                    isSelected
+                      ? 'border-violet-500 bg-violet-50 text-violet-950 dark:border-violet-400 dark:bg-violet-500/20 dark:text-violet-100'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-violet-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <Avatar name={entry.name} url={entry.avatarUrl} size="xs" />
+                      <span className="truncate text-xs font-bold">{entry.name}</span>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {isRealChamp && <Crown className="h-3.5 w-3.5 text-amber-500" />}
+                      <span className="rounded-md bg-violet-100 px-1.5 py-0.5 text-[10px] font-black text-violet-800 dark:bg-violet-500/25 dark:text-violet-200">
+                        +{formatProdePoints(ptsPreview)} pts
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mt-1.5 flex w-full items-center justify-between gap-2 text-[10px] text-slate-500 dark:text-slate-400">
+                    <span>
+                      {stat?.count || 0}{' '}
+                      {(stat?.count || 0) === 1 ? 'voto' : 'votos'} · {stat?.pct || 0}%
                     </span>
-                  )}
-                </div>
-              </button>
-            );
-          })}
+                    {isSelected && (
+                      <span className="inline-flex items-center gap-0.5 font-bold text-violet-700 dark:text-violet-300">
+                        <Check className="h-3 w-3" /> Tu voto
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+            Menos votos = mayor recompensa si sale campeón.
+          </p>
         </div>
       )}
 
@@ -507,12 +567,14 @@ export default function PredictionPollCard({
         >
           <span>
             {myEval.status === 'exact'
-              ? '🎯 ¡Acierto pleno!'
+              ? isClassic
+                ? '🎯 ¡Marcador exacto!'
+                : '🎯 ¡Acertaste en la encuesta!'
               : myEval.status === 'outcome'
               ? '✅ Acertaste ganador/empate'
               : '❌ Sin acierto esta vez'}
           </span>
-          <span>+{myEval.points} pts</span>
+          <span>+{formatProdePoints(myEval.points)} pts</span>
         </div>
       )}
 
@@ -540,7 +602,7 @@ export default function PredictionPollCard({
             <div className="mt-1.5 space-y-1.5">
               {votes.map((v) => {
                 const voter = participantMap.get(v.participant_id);
-                const evalV = evaluateVote(poll, v, targetDetails);
+                const evalV = evaluateVote(poll, v, targetDetails, optionStats);
                 let voteText = '';
                 if (poll.prediction_mode === 'champion') {
                   voteText =
@@ -585,7 +647,7 @@ export default function PredictionPollCard({
                               : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400'
                           }`}
                         >
-                          +{evalV.points}
+                          +{formatProdePoints(evalV.points)}
                         </span>
                       )}
                     </div>
