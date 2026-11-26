@@ -21,6 +21,7 @@ import {
   Sparkles,
   Swords,
   Table2,
+  Target,
   Trash2,
   Unlink,
   User,
@@ -49,6 +50,7 @@ import CustomMatchdaysTab from './CustomMatchdaysTab';
 import CustomStandingsTab from './CustomStandingsTab';
 import MatchResultModal from './MatchResultModal';
 import PotSetsModal from './PotSetsModal';
+import PredictionsTab from './PredictionsTab';
 import TournamentMatchesTab from './TournamentMatchesTab';
 import TournamentStandingsTab from './TournamentStandingsTab';
 import TournamentStatsTab from './TournamentStatsTab';
@@ -57,6 +59,7 @@ import TournamentSummaryTab from './TournamentSummaryTab';
 const TABS = [
   { id: 'standings', label: 'Tabla', icon: Table2 },
   { id: 'matches', label: 'Cruces / Jornadas', icon: Swords },
+  { id: 'predictions', label: 'Prode', icon: Target },
   { id: 'summary', label: 'Resumen', icon: Sparkles },
   { id: 'stats', label: 'Estadísticas', icon: BarChart3 },
 ];
@@ -1738,6 +1741,22 @@ export default function TournamentView({
                         onResetAllEliminations={handleResetAllEliminations}
                       />
                     ))}
+
+                  {activeTab === 'predictions' && (
+                    <PredictionsTab
+                      tournament={tournament}
+                      participants={enrichedParticipants}
+                      participantMap={participantMap}
+                      matches={matches}
+                      subtournaments={subtournaments}
+                      subEntries={subEntries}
+                      subEntryMembers={subEntryMembers}
+                      subMatches={subMatches}
+                      isAdmin={isAdmin}
+                      currentUserId={user.id}
+                      myLinkedParticipant={myLinkedParticipant}
+                    />
+                  )}
 
                   {activeTab === 'summary' && (
                     <TournamentSummaryTab
