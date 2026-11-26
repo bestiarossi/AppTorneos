@@ -20,18 +20,40 @@
     color-scheme: dark;
   }
 
+  html {
+    scroll-behavior: smooth;
+    overflow-x: clip;
+    overscroll-behavior-y: none;
+  }
+
   body {
     font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     background-color: var(--app-bg);
     color: var(--app-text);
     padding-bottom: env(safe-area-inset-bottom);
     transition: background-color 0.35s ease, color 0.25s ease;
-    overflow-x: hidden;
+    overflow-x: clip;
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
   }
 
   button:not(:disabled),
   [role="button"]:not([aria-disabled="true"]) {
     cursor: pointer;
+  }
+
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+  }
+
+  @media (max-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
   }
 
   ::-webkit-scrollbar {
@@ -236,26 +258,4 @@
 }
 .dark .text-orange-800 {
   color: #fdba74;
-}
-@layer base {
-  html,
-  body {
-    overflow-x: hidden;
-    overscroll-behavior-y: none;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  button,
-  a,
-  [role='button'] {
-    touch-action: manipulation;
-  }
-
-  @media (max-width: 768px) {
-    input,
-    select,
-    textarea {
-      font-size: 16px !important;
-    }
-  }
 }
