@@ -14,11 +14,13 @@ import {
   Swords,
   TrendingUp,
   Trophy,
+  User,
   Users,
   Zap,
 } from 'lucide-react';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import { getSubtournamentFormatMeta } from '../utils/customTournamentEngine';
+import { computeTournamentElo } from '../utils/eloEngine';
 import {
   computeCustomPairStats,
   computeCustomStats,
@@ -27,6 +29,7 @@ import {
   computeMatchH2H,
 } from '../utils/tournamentStatsEngine';
 import Avatar from './Avatar';
+import EloRankingWidget from './EloRankingWidget';
 
 function FormBadge({ item }) {
   const styles =
@@ -116,16 +119,17 @@ function HighlightCard({
 
 export default function TournamentStatsTab({
   tournament,
-  participants,
-  matches,
-  eliminations,
-  customMatchdays,
-  subtournaments,
-  subEntries,
-  subEntryMembers,
-  subMatches,
-  subEliminations,
+  participants = [],
+  matches = [],
+  eliminations = [],
+  customMatchdays = [],
+  subtournaments = [],
+  subEntries = [],
+  subEntryMembers = [],
+  subMatches = [],
+  subEliminations = [],
   currentUserId,
+  onOpenPlayerCard = null,
 }) {
   const myParticipant = useMemo(
     () => participants.find((p) => p.user_id === currentUserId) || null,
@@ -140,6 +144,29 @@ export default function TournamentStatsTab({
     () => new Map(participants.map((p) => [p.id, p])),
     [participants]
   );
+
+  // Cálculo del Ranking Elo del torneo
+  const eloRows = useMemo(() => {
+    return computeTournamentElo({
+      tournament,
+      participants,
+      matches,
+      customMatchdays,
+      subtournaments,
+      subEntries,
+      subEntryMembers,
+      subMatches,
+    });
+  }, [
+    tournament,
+    participants,
+    matches,
+    customMatchdays,
+    subtournaments,
+    subEntries,
+    subEntryMembers,
+    subMatches,
+  ]);
 
   useEffect(() => {
     if (participants.length === 0) {
@@ -212,6 +239,8 @@ export default function TournamentStatsTab({
         h2hPlayerBId={h2hPlayerBId}
         onSelectH2HA={setH2hPlayerAId}
         onSelectH2HB={setH2hPlayerBId}
+        eloRows={eloRows}
+        onOpenPlayerCard={onOpenPlayerCard}
       />
     );
   }
@@ -229,6 +258,8 @@ export default function TournamentStatsTab({
       h2hPlayerBId={h2hPlayerBId}
       onSelectH2HA={setH2hPlayerAId}
       onSelectH2HB={setH2hPlayerBId}
+      eloRows={eloRows}
+      onOpenPlayerCard={onOpenPlayerCard}
     />
   );
 }
@@ -245,6 +276,8 @@ function MatchBasedStatsView({
   h2hPlayerBId,
   onSelectH2HA,
   onSelectH2HB,
+  eloRows,
+  onOpenPlayerCard,
 }) {
   const stats = useMemo(
     () => computeMatchBasedStats(tournament, participants, matches),
@@ -312,7 +345,7 @@ function MatchBasedStatsView({
         />
       </div>
 
-      {stats.completedCount > 0 ? (
+      {stats.completedCount > 0 && (
         <div>
           <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
             <Award className="h-4 w-4 text-amber-500" />
@@ -392,70 +425,18 @@ function MatchBasedStatsView({
             )}
           </div>
         </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-          Carga el resultado de al menos un partido en{' '}
-          <strong>Cruces / Jornadas</strong> para desbloquear los récords y
-          estadísticas avanzadas.
-        </div>
       )}
 
-      {stats.completedCount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
-          <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
-            Efectividad por participante
-          </h3>
-          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-            Porcentaje de puntos obtenidos sobre el máximo posible en partidos
-            jugados.
-          </p>
-
-          <div className="space-y-3">
-            {stats.orderedPlayerStats.map((st) => {
-              const isMine = st.participant.user_id === currentUserId;
-              return (
-                <div key={st.participant.id} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Avatar
-                        name={st.participant.name}
-                        url={resolveParticipantAvatar(st.participant)}
-                        size="xs"
-                        highlight={isMine}
-                      />
-                      <span className="font-bold text-slate-800 dark:text-slate-100">
-                        {st.participant.name}
-                      </span>
-                      {isMine && (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                          Tú
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-slate-600 dark:text-slate-300">
-                      <span className="hidden text-[11px] sm:inline">
-                        {st.pg}G · {st.pe}E · {st.pp}P
-                      </span>
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        {st.pj > 0 ? `${st.effectivenessPct}%` : '—'}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    <div
-                      className={`h-full rounded-full transition-all ${
-                        isMine ? 'bg-emerald-600' : 'bg-slate-800 dark:bg-indigo-500'
-                      }`}
-                      style={{ width: `${st.effectivenessPct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Widget Ranking Elo FIFA */}
+      {eloRows && eloRows.some((r) => r.matchesPlayed > 0) && (
+        <EloRankingWidget
+          eloRows={eloRows}
+          currentUserId={currentUserId}
+          onOpenCard={onOpenPlayerCard}
+        />
       )}
 
+      {/* Ficha individual del jugador */}
       {selectedStats && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4 dark:border-slate-800">
@@ -470,17 +451,30 @@ function MatchBasedStatsView({
               </h3>
             </div>
 
-            <select
-              value={selectedStats.participant.id}
-              onChange={(e) => onSelectPlayer(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {participants.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-2">
+              {onOpenPlayerCard && (
+                <button
+                  type="button"
+                  onClick={() => onOpenPlayerCard(selectedStats.participant)}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-200"
+                >
+                  <span>🎴</span>
+                  <span>Ver Carta EA FC</span>
+                </button>
+              )}
+
+              <select
+                value={selectedStats.participant.id}
+                onChange={(e) => onSelectPlayer(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+              >
+                {participants.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -534,47 +528,10 @@ function MatchBasedStatsView({
               </p>
             </div>
           </div>
-
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 dark:border-slate-800 dark:bg-slate-950/40">
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Últimos partidos
-              </p>
-              {selectedStats.recentForm.length > 0 ? (
-                <div className="mt-2 flex items-center gap-1.5">
-                  {selectedStats.recentForm.map((f) => (
-                    <FormBadge key={f.matchId} item={f} />
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-1 text-xs text-slate-400">
-                  Sin partidos jugados aún.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1 text-xs">
-              {selectedStats.bestWin && (
-                <p className="text-emerald-800 dark:text-emerald-300">
-                  <strong>Mejor victoria:</strong> {selectedStats.bestWin.forScore}-
-                  {selectedStats.bestWin.againstScore} vs{' '}
-                  {selectedStats.bestWin.opponentName} (
-                  {selectedStats.bestWin.roundName})
-                </p>
-              )}
-              {selectedStats.worstLoss && (
-                <p className="text-rose-700 dark:text-rose-300">
-                  <strong>Peor derrota:</strong> {selectedStats.worstLoss.forScore}-
-                  {selectedStats.worstLoss.againstScore} vs{' '}
-                  {selectedStats.worstLoss.opponentName} (
-                  {selectedStats.worstLoss.roundName})
-                </p>
-              )}
-            </div>
-          </div>
         </div>
       )}
 
+      {/* Cara a Cara (H2H) */}
       {participants.length >= 2 && (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -675,30 +632,6 @@ function MatchBasedStatsView({
                   </p>
                 </div>
               </div>
-
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                {h2h.history.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 px-4 py-2.5 text-xs"
-                  >
-                    <span className="font-semibold text-slate-500 dark:text-slate-400">
-                      {item.roundName}
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-slate-100">
-                      {item.hasScores
-                        ? `${h2h.playerA?.name} ${item.scoreForA} - ${item.scoreForB} ${h2h.playerB?.name}`
-                        : item.winnerSide === 'draw'
-                        ? 'Empate'
-                        : `Ganó ${
-                            item.winnerSide === 'A'
-                              ? h2h.playerA?.name
-                              : h2h.playerB?.name
-                          }`}
-                    </span>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </div>
@@ -747,9 +680,7 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
           label="Campeón"
           value={lsStats.champion ? lsStats.champion.name : 'En juego'}
           subtext={
-            lsStats.champion
-              ? 'Último superviviente'
-              : 'Se define al quedar 1'
+            lsStats.champion ? 'Último superviviente' : 'Se define al quedar 1'
           }
         />
       </div>
@@ -779,62 +710,6 @@ function LastStandingStatsView({ participants, eliminations, currentUserId }) {
           )}
         </div>
       )}
-
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
-        <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
-          Índice de resistencia
-        </h3>
-        <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-          Comparativa visual según el orden en que cada jugador permaneció en pie.
-        </p>
-
-        <div className="space-y-3">
-          {lsStats.survivalRows.map((row) => {
-            const isMine = row.participant.user_id === currentUserId;
-            return (
-              <div key={row.participant.id} className="space-y-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <Avatar
-                      name={row.participant.name}
-                      url={resolveParticipantAvatar(row.participant)}
-                      size="xs"
-                      highlight={row.isChampion || isMine}
-                    />
-                    <span className="font-bold text-slate-800 dark:text-slate-100">
-                      {row.participant.name}
-                    </span>
-                    {isMine && (
-                      <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                        Tú
-                      </span>
-                    )}
-                  </div>
-                  <span className="font-semibold text-slate-600 dark:text-slate-300">
-                    {row.isChampion
-                      ? 'Campeón'
-                      : row.isAlive
-                      ? 'En pie'
-                      : `Eliminado #${row.eliminationOrder}`}
-                  </span>
-                </div>
-                <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                  <div
-                    className={`h-full rounded-full ${
-                      row.isChampion
-                        ? 'bg-amber-500'
-                        : row.isAlive
-                        ? 'bg-emerald-600'
-                        : 'bg-slate-400'
-                    }`}
-                    style={{ width: `${row.barPct}%` }}
-                  />
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
     </div>
   );
 }
@@ -855,6 +730,8 @@ function CustomStatsView({
   h2hPlayerBId,
   onSelectH2HA,
   onSelectH2HB,
+  eloRows,
+  onOpenPlayerCard,
 }) {
   const stats = useMemo(
     () =>
@@ -882,33 +759,6 @@ function CustomStatsView({
     stats.playerStatsMap.get(selectedPlayerId) ||
     stats.orderedPlayerStats[0] ||
     null;
-
-  const pairStats = useMemo(
-    () =>
-      computeCustomPairStats(
-        h2hPlayerAId,
-        h2hPlayerBId,
-        participantMap,
-        subtournaments,
-        subEntries,
-        subEntryMembers,
-        subMatches
-      ),
-    [
-      h2hPlayerAId,
-      h2hPlayerBId,
-      participantMap,
-      subtournaments,
-      subEntries,
-      subEntryMembers,
-      subMatches,
-    ]
-  );
-
-  const topPoints = Math.max(
-    1,
-    stats.orderedPlayerStats[0]?.totalPoints || 1
-  );
 
   return (
     <div className="space-y-6">
@@ -943,144 +793,13 @@ function CustomStatsView({
         />
       </div>
 
-      {stats.completedSubtournamentsCount > 0 ||
-      stats.totalInternalMatchesPlayed > 0 ? (
-        <div>
-          <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
-            <Award className="h-4 w-4 text-amber-500" />
-            <span>Récords y destacados del torneo</span>
-          </h3>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {stats.mostTitlesLeader && (
-              <HighlightCard
-                icon={Crown}
-                iconClass="text-amber-600"
-                title="Más subtorneos ganados (1.º)"
-                participant={stats.mostTitlesLeader.participant}
-                primary={stats.mostTitlesLeader.participant.name}
-                secondary={`${stats.mostTitlesLeader.firstPlaces} ${
-                  stats.mostTitlesLeader.firstPlaces === 1
-                    ? 'título obtenido'
-                    : 'títulos obtenidos'
-                }`}
-              />
-            )}
-
-            {stats.mostPodiumsLeader && (
-              <HighlightCard
-                icon={Medal}
-                iconClass="text-indigo-600"
-                title="Más podios (Top 3)"
-                participant={stats.mostPodiumsLeader.participant}
-                primary={stats.mostPodiumsLeader.participant.name}
-                secondary={`${stats.mostPodiumsLeader.podiums} podios en ${stats.mostPodiumsLeader.completedSubtournamentsPlayed} subtorneos`}
-              />
-            )}
-
-            {stats.bestAverageLeader && (
-              <HighlightCard
-                icon={TrendingUp}
-                iconClass="text-emerald-600"
-                title="Mejor promedio por subtorneo"
-                participant={stats.bestAverageLeader.participant}
-                primary={stats.bestAverageLeader.participant.name}
-                secondary={`${stats.bestAverageLeader.avgPointsPerSub} pts por participación`}
-              />
-            )}
-
-            {stats.bestMatchdayOverall && (
-              <HighlightCard
-                icon={Flame}
-                iconClass="text-orange-600"
-                title="Mejor Jornada individual"
-                participant={stats.bestMatchdayOverall.participant}
-                primary={`${stats.bestMatchdayOverall.participant.name} (+${stats.bestMatchdayOverall.points} pts)`}
-                secondary={`Conseguido en ${stats.bestMatchdayOverall.matchdayName}`}
-              />
-            )}
-
-            {stats.biggestInternalMatch && (
-              <HighlightCard
-                icon={Zap}
-                iconClass="text-sky-600"
-                title="Mayor goleada interna"
-                primary={`${stats.biggestInternalMatch.winnerName} ${stats.biggestInternalMatch.winnerScore} - ${stats.biggestInternalMatch.loserScore} ${stats.biggestInternalMatch.loserName}`}
-                secondary={`En "${stats.biggestInternalMatch.subName}" (+${stats.biggestInternalMatch.margin})`}
-              />
-            )}
-
-            {stats.highestScoringInternalMatch && (
-              <HighlightCard
-                icon={Star}
-                iconClass="text-rose-600"
-                title="Cruce con más goles/puntos"
-                primary={`${stats.highestScoringInternalMatch.nameA} ${stats.highestScoringInternalMatch.scoreA} - ${stats.highestScoringInternalMatch.scoreB} ${stats.highestScoringInternalMatch.nameB}`}
-                secondary={`${stats.highestScoringInternalMatch.total} totales en "${stats.highestScoringInternalMatch.subName}"`}
-              />
-            )}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900/40 dark:text-slate-400">
-          Crea y finaliza subtorneos en <strong>Cruces / Jornadas</strong> para
-          comenzar a ver récords, promedios y evolución por jornada.
-        </div>
-      )}
-
-      {stats.completedSubtournamentsCount > 0 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
-          <h3 className="mb-1 text-sm font-bold text-slate-900 dark:text-white">
-            Comparativa de puntaje acumulado
-          </h3>
-          <p className="mb-4 text-xs text-slate-500 dark:text-slate-400">
-            Puntaje total sumado por cada participante en la Tabla General.
-          </p>
-
-          <div className="space-y-3">
-            {stats.orderedPlayerStats.map((st) => {
-              const isMine = st.participant.user_id === currentUserId;
-              const widthPct = Math.round((st.totalPoints / topPoints) * 100);
-              return (
-                <div key={st.participant.id} className="space-y-1.5">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2">
-                      <Avatar
-                        name={st.participant.name}
-                        url={resolveParticipantAvatar(st.participant)}
-                        size="xs"
-                        highlight={isMine}
-                      />
-                      <span className="font-bold text-slate-800 dark:text-slate-100">
-                        {st.participant.name}
-                      </span>
-                      {isMine && (
-                        <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                          Tú
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-slate-500 dark:text-slate-300">
-                      <span className="hidden text-[11px] sm:inline">
-                        {st.firstPlaces} títulos · {st.podiums} podios
-                      </span>
-                      <span className="font-extrabold text-emerald-700 dark:text-emerald-400">
-                        {st.totalPoints} pts
-                      </span>
-                    </div>
-                  </div>
-                  <div className="h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
-                    <div
-                      className={`h-full rounded-full ${
-                        isMine ? 'bg-emerald-600' : 'bg-indigo-600'
-                      }`}
-                      style={{ width: `${widthPct}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {/* Widget Ranking Elo FIFA en Torneos Personalizados */}
+      {eloRows && eloRows.some((r) => r.matchesPlayed > 0) && (
+        <EloRankingWidget
+          eloRows={eloRows}
+          currentUserId={currentUserId}
+          onOpenCard={onOpenPlayerCard}
+        />
       )}
 
       {selectedStats && (
@@ -1097,185 +816,22 @@ function CustomStatsView({
               </h3>
             </div>
 
-            <select
-              value={selectedStats.participant.id}
-              onChange={(e) => onSelectPlayer(e.target.value)}
-              className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-            >
-              {participants.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Puntos totales
-              </p>
-              <p className="mt-1 text-lg font-extrabold text-emerald-700 dark:text-emerald-400">
-                {selectedStats.totalPoints}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Prom: {selectedStats.avgPointsPerSub} / subtorneo
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Títulos / Podios
-              </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-                {selectedStats.firstPlaces} / {selectedStats.podiums}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {selectedStats.bestRank
-                  ? `Mejor puesto: ${selectedStats.bestRank}.º`
-                  : 'Sin puestos aún'}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Subtorneos jugados
-              </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-                {selectedStats.completedSubtournamentsPlayed}
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                De {selectedStats.totalSubtournamentsJoined} anotados
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-800 dark:bg-slate-950/40">
-              <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                Cruces internos
-              </p>
-              <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-                {selectedStats.internalWins}G-{selectedStats.internalDraws}E-
-                {selectedStats.internalLosses}P
-              </p>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {selectedStats.internalMatchesPlayed} partidos jugados
-              </p>
-            </div>
-          </div>
-
-          {selectedStats.timeline.length > 0 && (
-            <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50/60 p-4 dark:border-slate-800 dark:bg-slate-950/40">
-              <p className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-slate-300">
-                Evolución por Jornada
-              </p>
-              <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-                {selectedStats.timeline.map((tl) => (
-                  <div
-                    key={tl.matchdayId}
-                    className="rounded-xl border border-slate-200 bg-white p-2.5 text-center dark:border-slate-800 dark:bg-slate-900/70"
-                  >
-                    <p className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                      {tl.name}
-                    </p>
-                    <p className="mt-0.5 text-base font-extrabold text-slate-900 dark:text-white">
-                      {tl.participated ? `+${tl.points}` : '—'}
-                    </p>
-                    <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400">
-                      Acum: {tl.cumulativePoints} pts
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {selectedStats.history.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Historial de subtorneos ({selectedStats.history.length})
-              </p>
-              <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                {selectedStats.history.map((h) => {
-                  const fmtMeta = getSubtournamentFormatMeta(h.format);
-                  return (
-                    <div
-                      key={h.subId}
-                      className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 text-xs"
-                    >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="font-bold text-slate-900 dark:text-white">
-                            {h.subName}
-                          </span>
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[10px] font-semibold ${fmtMeta.badgeClass}`}
-                          >
-                            {fmtMeta.label}
-                          </span>
-                          <span className="text-[11px] text-slate-400">
-                            · {h.matchdayName}
-                          </span>
-                        </div>
-                        {h.isTeamBased && (
-                          <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
-                            Equipo: <strong>{h.entryName}</strong>
-                            {h.teammates.length > 0
-                              ? ` (con ${h.teammates.join(', ')})`
-                              : ''}
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="shrink-0">
-                        {h.status === 'completed' ? (
-                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 font-bold text-emerald-800">
-                            <span>{h.finalRank}.º puesto</span>
-                            <span>· +{h.pointsAwarded} pts</span>
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-sky-100 px-2.5 py-1 font-semibold text-sky-800">
-                            En juego
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {participants.length >= 2 && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Swords className="h-4 w-4 text-amber-600" />
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Cara a Cara &amp; Socios de Equipo
-              </h3>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={h2hPlayerAId}
-                onChange={(e) => onSelectH2HA(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-              >
-                {participants.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-
-              <span className="text-xs font-bold text-slate-400">vs</span>
+              {onOpenPlayerCard && (
+                <button
+                  type="button"
+                  onClick={() => onOpenPlayerCard(selectedStats.participant)}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-200"
+                >
+                  <span>🎴</span>
+                  <span>Ver Carta EA FC</span>
+                </button>
+              )}
 
               <select
-                value={h2hPlayerBId}
-                onChange={(e) => onSelectH2HB(e.target.value)}
-                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                value={selectedStats.participant.id}
+                onChange={(e) => onSelectPlayer(e.target.value)}
+                className="min-h-[44px] rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-bold text-slate-800 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
               >
                 {participants.map((p) => (
                   <option key={p.id} value={p.id}>
@@ -1285,86 +841,6 @@ function CustomStatsView({
               </select>
             </div>
           </div>
-
-          {h2hPlayerAId === h2hPlayerBId ? (
-            <p className="rounded-xl border border-dashed border-slate-200 bg-slate-50 py-6 text-center text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-950/40 dark:text-slate-400">
-              Selecciona dos jugadores distintos para comparar su historial.
-            </p>
-          ) : !pairStats ? null : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Cruces directos
-                  </p>
-                  <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-                    {pairStats.matchWinsA} - {pairStats.matchDraws} -{' '}
-                    {pairStats.matchWinsB}
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {pairStats.playerA?.name} / Empates / {pairStats.playerB?.name}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Tabla compartida
-                  </p>
-                  <p className="mt-1 text-lg font-extrabold text-slate-900 dark:text-white">
-                    {pairStats.aheadCountA} - {pairStats.aheadCountB}
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Veces mejor ubicado ({pairStats.timesOpponentsInCompletedSubs}{' '}
-                    subtorneos)
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 text-center dark:border-slate-800 dark:bg-slate-950/40">
-                  <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Como compañeros
-                  </p>
-                  <p className="mt-1 text-lg font-extrabold text-indigo-700 dark:text-indigo-400">
-                    {pairStats.timesTeammates}
-                  </p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    {pairStats.teammateWins}{' '}
-                    {pairStats.teammateWins === 1
-                      ? 'subtorneo ganado juntos'
-                      : 'subtorneos ganados juntos'}
-                  </p>
-                </div>
-              </div>
-
-              {pairStats.directMatches.length > 0 && (
-                <div className="divide-y divide-slate-100 rounded-xl border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
-                  {pairStats.directMatches.map((dm) => (
-                    <div
-                      key={dm.id}
-                      className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-xs"
-                    >
-                      <span className="text-slate-500 dark:text-slate-400">
-                        <strong className="text-slate-700 dark:text-slate-200">
-                          {dm.subName}
-                        </strong>{' '}
-                        · {dm.roundName}
-                      </span>
-                      <span className="font-bold text-slate-900 dark:text-slate-100">
-                        {dm.hasScores
-                          ? `${pairStats.playerA?.name} ${dm.scoreForA} - ${dm.scoreForB} ${pairStats.playerB?.name}`
-                          : dm.winnerSide === 'draw'
-                          ? 'Empate'
-                          : `Ganó ${
-                              dm.winnerSide === 'A'
-                                ? pairStats.playerA?.name
-                                : pairStats.playerB?.name
-                            }`}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
         </div>
       )}
     </div>

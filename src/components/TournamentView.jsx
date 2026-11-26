@@ -1,3 +1,4 @@
+import PlayerCardModal from './PlayerCardModal';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -109,7 +110,7 @@ export default function TournamentView({
   onBack,
 }) {
   const toast = useToast();
-
+  const [cardModalParticipant, setCardModalParticipant] = useState(null);
   const [tournament, setTournament] = useState(null);
   const [membership, setMembership] = useState(null);
   const [members, setMembers] = useState([]);
@@ -2395,7 +2396,15 @@ export default function TournamentView({
                                         title="Editar nombre"
                                         aria-label={`Editar a ${participant.name}`}
                                       >
-                                        <Pencil className="h-4 w-4" />
+                                        <Pencil className="h-4 w-4" /> <button
+                                          type="button"
+                                          onClick={() => setCardModalParticipant(participant)}
+                                          className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800 transition hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-200"
+                                          title={`Ver Carta EA FC de ${participant.name}`}
+                                        >
+                                          <span>🎴</span>
+                                          <span className="hidden sm:inline">Carta</span>
+                                        </button>
                                       </button>
 
                                       {isLinked && (
@@ -2610,6 +2619,20 @@ export default function TournamentView({
           </nav>,
           document.body
         )}
+        <PlayerCardModal
+        isOpen={Boolean(cardModalParticipant)}
+        participant={cardModalParticipant}
+        tournament={tournament}
+        matches={matches}
+        customMatchdays={customMatchdays}
+        subtournaments={subtournaments}
+        subEntries={subEntries}
+        subEntryMembers={subEntryMembers}
+        subMatches={subMatches}
+        prodePolls={prodePolls}
+        prodeVotes={prodeVotes}
+        onClose={() => setCardModalParticipant(null)}
+      />
     </>
   );
 }
