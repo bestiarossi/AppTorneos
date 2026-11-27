@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
   ArrowLeft,
+  Award,
   BarChart3,
   Camera,
   Check,
@@ -67,6 +68,7 @@ import PredictionsTab from './PredictionsTab';
 import { TournamentViewSkeleton } from './Skeletons';
 import { useToast } from './ToastProvider';
 import TournamentMatchesTab from './TournamentMatchesTab';
+import TournamentScorersTab from './TournamentScorersTab';
 import TournamentStandingsTab from './TournamentStandingsTab';
 import TournamentStatsTab from './TournamentStatsTab';
 import TournamentSummaryTab from './TournamentSummaryTab';
@@ -79,6 +81,7 @@ const TABS = [
     shortLabel: 'Cruces',
     icon: Swords,
   },
+  { id: 'scorers', label: 'Goleadores', shortLabel: 'Goles', icon: Award },
   { id: 'predictions', label: 'Prode', shortLabel: 'Prode', icon: Target },
   { id: 'summary', label: 'Resumen', shortLabel: 'Resumen', icon: Sparkles },
   { id: 'stats', label: 'Estadísticas', shortLabel: 'Stats', icon: BarChart3 },
@@ -1356,6 +1359,7 @@ export default function TournamentView({
     }
 
     const nextConfig = {
+      ...(tournament.config || {}),
       ...baseConfig,
       sport: editSport,
       allow_self_join: editAllowSelfJoin,
@@ -1897,7 +1901,7 @@ export default function TournamentView({
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
-                      className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-2 px-4 py-3 text-sm font-semibold transition ${
+                      className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 px-3.5 py-3 text-sm font-semibold transition ${
                         isActive
                           ? 'text-emerald-700 dark:text-emerald-300'
                           : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
@@ -1915,7 +1919,7 @@ export default function TournamentView({
                         <motion.div
                           layoutId="tournament-active-tab-pill"
                           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                          className="absolute inset-x-1.5 top-1 bottom-0 rounded-t-xl border-b-2 border-emerald-500 bg-emerald-500/10 dark:bg-emerald-400/12"
+                          className="absolute inset-x-1 top-1 bottom-0 rounded-t-xl border-b-2 border-emerald-500 bg-emerald-500/10 dark:bg-emerald-400/12"
                         />
                       )}
                     </button>
@@ -2016,6 +2020,17 @@ export default function TournamentView({
                           onOpenProde={() => setActiveTab('predictions')}
                         />
                       ))}
+
+                    {activeTab === 'scorers' && (
+                      <TournamentScorersTab
+                        tournament={tournament}
+                        participants={enrichedParticipants}
+                        participantMap={participantMap}
+                        isAdmin={isAdmin}
+                        currentUserId={user.id}
+                        onTournamentUpdated={(updated) => setTournament(updated)}
+                      />
+                    )}
 
                     {activeTab === 'predictions' && (
                       <PredictionsTab
@@ -2540,9 +2555,9 @@ export default function TournamentView({
         createPortal(
           <nav
             aria-label="Navegación del torneo"
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/85 bg-white/90 px-2 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.16)] backdrop-blur-xl md:hidden dark:border-slate-800/90 dark:bg-slate-950/90 dark:shadow-[0_-12px_36px_-10px_rgba(0,0,0,0.75)]"
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/85 bg-white/90 px-1.5 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.16)] backdrop-blur-xl md:hidden dark:border-slate-800/90 dark:bg-slate-950/90 dark:shadow-[0_-12px_36px_-10px_rgba(0,0,0,0.75)]"
           >
-            <div className="mx-auto flex max-w-md items-center justify-around gap-1">
+            <div className="mx-auto flex max-w-md items-center justify-around gap-0.5">
               {TABS.map((tab) => {
                 const Icon = tab.icon;
                 const isActive = activeTab === tab.id;
@@ -2554,7 +2569,7 @@ export default function TournamentView({
                       setActiveTab(tab.id);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className={`relative flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-1 py-1.5 transition-colors ${
+                    className={`relative flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-0.5 py-1.5 transition-colors ${
                       isActive
                         ? 'text-emerald-600 dark:text-emerald-400'
                         : 'text-slate-500 dark:text-slate-400'
@@ -2575,7 +2590,7 @@ export default function TournamentView({
                         </span>
                       )}
                     </div>
-                    <span className="relative z-10 text-[10px] font-bold tracking-tight">
+                    <span className="relative z-10 text-[9.5px] font-bold tracking-tight">
                       {tab.shortLabel}
                     </span>
                   </button>
