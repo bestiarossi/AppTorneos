@@ -87,6 +87,7 @@ export default function LiveTeamDrawModal({
   const autoTimerRef = useRef(null);
   const lastRemoteSpinKeyRef = useRef(null);
   const spectatorConfettiFiredRef = useRef(null);
+  const lastStartedBroadcastRef = useRef(null);
 
   const effectiveTeams = useMemo(
     () => (isSpectator ? remoteState?.teams || [] : teams),
@@ -121,7 +122,6 @@ export default function LiveTeamDrawModal({
     [effectiveTeams]
   );
 
-  // Cola unificada (en modo espectador viene de remoteState.queue)
   const drawQueue = useMemo(() => {
     if (isSpectator) {
       return Array.isArray(remoteState?.queue) ? remoteState.queue : [];
@@ -159,7 +159,6 @@ export default function LiveTeamDrawModal({
     }
   }, []);
 
-  // Helper para emitir el estado actual en vivo a todos los participantes
   const emitBroadcast = useCallback(
     (overrides = {}) => {
       if (isSpectator || !onBroadcastState) return;
@@ -188,11 +187,14 @@ export default function LiveTeamDrawModal({
     ]
   );
 
-  // Reset en modo Host al abrir o re-sortear + emitir inicio en vivo
+  // Reset en modo Host al abrir o re-sortear
   useEffect(() => {
     if (isSpectator) return;
     clearTimers();
-    if (!isOpen) return;
+    if (!isOpen) {
+      lastStartedBroadcastRef.current = null;
+      return;
+    }
 
     setRevealedCount(0);
     setIsSpinning(false);
@@ -201,25 +203,41 @@ export default function LiveTeamDrawModal({
     setSpinningTeamName('');
     setLastRevealed(null);
     setAutoPlay(false);
+  }, [isOpen, targetAssignments, isSpectator, clearTimers]);
 
-    if (onBroadcastState && drawQueue.length > 0) {
-      onBroadcastState({
-        active: true,
-        drawId: `draw-${Date.now()}`,
-        scopeName: scopeName || '',
-        potSetName: potSetName || '',
-        teams: effectiveTeams,
-        queue: drawQueue,
-        revealedCount: 0,
-        spinningIndex: null,
-        speedId,
-        updatedAt: new Date().toISOString(),
-      });
+  // Emisión blindada apenas isOpen + drawQueue + onBroadcastState estén listos
+  useEffect(() => {
+    if (isSpectator || !isOpen || !onBroadcastState || drawQueue.length === 0) {
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, targetAssignments, isSpectator]);
+    const startKey = JSON.stringify(targetAssignments);
+    if (lastStartedBroadcastRef.current === startKey) return;
+    lastStartedBroadcastRef.current = startKey;
 
-  // Animación local compartida (Host y Espectador corren la misma desaceleración exacta)
+    onBroadcastState({
+      active: true,
+      drawId: `draw-${Date.now()}`,
+      scopeName: scopeName || '',
+      potSetName: potSetName || '',
+      teams: effectiveTeams,
+      queue: drawQueue,
+      revealedCount: 0,
+      spinningIndex: null,
+      speedId,
+      updatedAt: new Date().toISOString(),
+    });
+  }, [
+    isSpectator,
+    isOpen,
+    onBroadcastState,
+    drawQueue,
+    targetAssignments,
+    scopeName,
+    potSetName,
+    effectiveTeams,
+    speedId,
+  ]);
+
   const runRouletteAnimation = useCallback(
     (indexToReveal, speedObj, onComplete) => {
       const nextItem = drawQueue[indexToReveal];
@@ -336,7 +354,6 @@ export default function LiveTeamDrawModal({
   const drawNextPlayer = useCallback(() => {
     if (isSpectator || isSpinning || revealedCount >= totalToDraw) return;
 
-    // Avisamos a todos los espectadores que empezó el giro para este índice
     emitBroadcast({ spinningIndex: revealedCount });
 
     runRouletteAnimation(revealedCount, activeSpeed, (revealedItem) => {
@@ -363,7 +380,6 @@ export default function LiveTeamDrawModal({
     runRouletteAnimation,
   ]);
 
-  // Modo automático (solo Host)
   useEffect(() => {
     if (isSpectator || !isOpen || !autoPlay || isSpinning || isFinished) return;
 
@@ -472,7 +488,11 @@ export default function LiveTeamDrawModal({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-rose-600 uppercase dark:bg-[#CCFF00]/20 dark:text-[#CCFF00] classic:bg-[#D9A441] classic:text-[#1E4638]">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                      {isSpectator ? 'TRANSMISIÓN EN VIVO' : 'EN VIVO'}
+                      {isSpectator
+                        ? 'TRANSMISIÓN EN VIVO'
+                        : onBroadcastState
+                        ? '📡 Transmitiendo'
+                        : '⚠️ Modo local'}
                     </span>
                     {effectivePotSetName && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 classic:bg-[#FBF5E8]/20 classic:text-[#FBF5E8]">
@@ -515,7 +535,6 @@ export default function LiveTeamDrawModal({
                     )}
                   </div>
 
-                  {/* Banner claro del equipo destino ANTES y DURANTE el giro */}
                   {!isFinished && (isSpinning || upcomingTeamName) && (
                     <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#CCFF00]/40 bg-[#CCFF00]/15 px-4 py-1 text-xs font-black tracking-wider text-[#CCFF00] uppercase classic:border-[#D9A441] classic:bg-[#D9A441]/20 classic:text-[#FBF5E8]">
                       <Users className="h-3.5 w-3.5" />
@@ -637,7 +656,6 @@ export default function LiveTeamDrawModal({
                     </AnimatePresence>
                   </div>
 
-                  {/* Controles exclusivos del Admin */}
                   {!isSpectator && !isFinished && (
                     <div className="mt-5 flex flex-col items-center gap-3">
                       <div className="flex flex-wrap items-center justify-center gap-2.5">
@@ -690,7 +708,6 @@ export default function LiveTeamDrawModal({
                         </motion.button>
                       </div>
 
-                      {/* Selector de velocidad */}
                       <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1">
                         <span className="inline-flex items-center gap-1 px-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
                           <Gauge className="h-3 w-3" />
