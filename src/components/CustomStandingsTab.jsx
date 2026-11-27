@@ -317,89 +317,14 @@ export default function CustomStandingsTab({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-slate-900 dark:text-white">
-            Tabla General de Puntos
-          </h2>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            Acumulado automático de todos los subtorneos finalizados en cada
-            jornada.
-          </p>
-        </div>
-
-        {resolvedStandings.length > 0 && (
-          <WhatsAppShareButton
-            compact
-            label="Compartir Tabla"
-            getText={buildWhatsAppStandingsText}
-          />
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2 }}
-          className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3.5 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/60"
-        >
-          <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Subtorneos finalizados
-          </span>
-          <span className="mt-1 block text-lg font-black text-slate-900 tabular-nums dark:text-white">
-            {completedSubtournaments.length}{' '}
-            <span className="text-xs font-semibold text-slate-400">
-              / {subtournaments.length}
-            </span>
-          </span>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.04 }}
-          className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3.5 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/60"
-        >
-          <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Jornadas
-          </span>
-          <span className="mt-1 block text-lg font-black text-slate-900 tabular-nums dark:text-white">
-            {sortedMatchdays.length}
-          </span>
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.2, delay: 0.08 }}
-          className={`col-span-2 rounded-2xl border p-3.5 backdrop-blur-xs sm:col-span-1 ${
-            leader
-              ? 'podium-gold'
-              : 'border-amber-200/80 bg-amber-50/60 dark:border-amber-500/25 dark:bg-amber-500/10'
-          }`}
-        >
-          <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
-            <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
-            <span>Líder actual</span>
-          </span>
-          <div className="mt-1 flex items-center gap-2">
-            {leader && (
-              <Avatar
-                name={leader.participant.name}
-                url={resolveParticipantAvatar(leader.participant)}
-                size="xs"
-              />
-            )}
-            <span className="block truncate text-sm font-black text-slate-900 tabular-nums dark:text-white">
-              {leader
-                ? `${leader.participant.name} (${formatPoints(
-                    leader.totalPoints
-                  )} pts)`
-                : 'Sin puntos aún'}
-            </span>
-          </div>
-        </motion.div>
+      <div>
+        <h2 className="text-base font-bold text-slate-900 dark:text-white">
+          Tabla General de Puntos
+        </h2>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          Acumulado automático de todos los subtorneos finalizados en cada
+          jornada.
+        </p>
       </div>
 
       <CustomPodiumShowcase items={podiumItems} badgesMap={badgesMap} />
@@ -656,6 +581,84 @@ export default function CustomStandingsTab({
           </div>
         </div>
       )}
+
+      {/* Resumen de subtorneos/jornadas y botón de WhatsApp debajo de la tabla */}
+      <div className="space-y-3 pt-1">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3.5 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/60"
+          >
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Subtorneos finalizados
+            </span>
+            <span className="mt-1 block text-lg font-black text-slate-900 tabular-nums dark:text-white">
+              {completedSubtournaments.length}{' '}
+              <span className="text-xs font-semibold text-slate-400">
+                / {subtournaments.length}
+              </span>
+            </span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.04 }}
+            className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-3.5 backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/60"
+          >
+            <span className="block text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+              Jornadas
+            </span>
+            <span className="mt-1 block text-lg font-black text-slate-900 tabular-nums dark:text-white">
+              {sortedMatchdays.length}
+            </span>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, delay: 0.08 }}
+            className={`col-span-2 rounded-2xl border p-3.5 backdrop-blur-xs sm:col-span-1 ${
+              leader
+                ? 'podium-gold'
+                : 'border-amber-200/80 bg-amber-50/60 dark:border-amber-500/25 dark:bg-amber-500/10'
+            }`}
+          >
+            <span className="flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide text-amber-800 dark:text-amber-300">
+              <Trophy className="h-3.5 w-3.5 text-amber-600 dark:text-amber-300" />
+              <span>Líder actual</span>
+            </span>
+            <div className="mt-1 flex items-center gap-2">
+              {leader && (
+                <Avatar
+                  name={leader.participant.name}
+                  url={resolveParticipantAvatar(leader.participant)}
+                  size="xs"
+                />
+              )}
+              <span className="block truncate text-sm font-black text-slate-900 tabular-nums dark:text-white">
+                {leader
+                  ? `${leader.participant.name} (${formatPoints(
+                      leader.totalPoints
+                    )} pts)`
+                  : 'Sin puntos aún'}
+              </span>
+            </div>
+          </motion.div>
+        </div>
+
+        {resolvedStandings.length > 0 && (
+          <div className="flex justify-end">
+            <WhatsAppShareButton
+              compact
+              label="Compartir Tabla"
+              getText={buildWhatsAppStandingsText}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

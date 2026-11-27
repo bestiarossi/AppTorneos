@@ -467,25 +467,17 @@ export default function TournamentStandingsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-            Tabla de Posiciones
-          </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">
-            {format === 'league'
-              ? '3 pts por victoria · 1 pt por empate · Desempate por diferencia y goles a favor.'
-              : format === 'knockout'
-              ? 'Clasificación según avance y resultados en las llaves eliminatorias.'
-              : 'Orden de supervivencia según las eliminaciones registradas.'}
-          </p>
-        </div>
-
-        <WhatsAppShareButton
-          compact
-          label="Compartir Tabla"
-          getText={buildWhatsAppText}
-        />
+      <div>
+        <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+          Tabla de Posiciones
+        </h3>
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {format === 'league'
+            ? '3 pts por victoria · 1 pt por empate · Desempate por diferencia y goles a favor.'
+            : format === 'knockout'
+            ? 'Clasificación según avance y resultados en las llaves eliminatorias.'
+            : 'Orden de supervivencia según las eliminaciones registradas.'}
+        </p>
       </div>
 
       <PodiumShowcase items={podiumItems} badgesMap={badgesMap} />
@@ -837,6 +829,15 @@ export default function TournamentStandingsTab({
           })}
         </div>
       )}
+
+      {/* Botón de compartir por WhatsApp debajo de la tabla */}
+      <div className="flex justify-end pt-1">
+        <WhatsAppShareButton
+          compact
+          label="Compartir Tabla"
+          getText={buildWhatsAppText}
+        />
+      </div>
     </div>
   );
 }
