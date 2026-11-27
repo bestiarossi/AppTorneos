@@ -49,7 +49,7 @@ export function ToastProvider({ children }) {
         createPortal(
           <div
             aria-live="polite"
-            className="pointer-events-none fixed inset-x-0 top-16 z-[110] flex flex-col items-center gap-2 px-4 pt-2 sm:items-end sm:px-6"
+            className="pointer-events-none fixed inset-x-0 top-16 z-[110] flex flex-col items-center gap-2 px-4 pt-3 sm:items-end sm:px-6"
           >
             <AnimatePresence initial={false}>
               {toasts.map((t) => {
@@ -63,28 +63,40 @@ export function ToastProvider({ children }) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -10, scale: 0.94 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                    className={`pointer-events-auto flex max-w-sm items-center gap-2.5 rounded-2xl border px-3.5 py-2.5 text-xs font-bold shadow-xl backdrop-blur-xl ${
+                    className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border bg-[#141923]/95 px-3.5 py-2.5 text-xs font-bold text-white shadow-2xl backdrop-blur-xl ${
                       isErr
-                        ? 'border-rose-300/80 bg-rose-50/95 text-rose-800 dark:border-rose-500/40 dark:bg-rose-950/90 dark:text-rose-200'
+                        ? 'border-rose-500/40'
                         : isInfo
-                        ? 'border-sky-300/80 bg-sky-50/95 text-sky-900 dark:border-sky-500/40 dark:bg-sky-950/90 dark:text-sky-200'
-                        : 'border-emerald-300/80 bg-white/95 text-slate-900 dark:border-emerald-500/40 dark:bg-slate-900/95 dark:text-emerald-200'
+                        ? 'border-[#2563EB]/45'
+                        : 'border-[#CCFF00]/35'
                     }`}
                   >
-                    {isErr ? (
-                      <AlertCircle className="h-4 w-4 shrink-0 text-rose-600 dark:text-rose-400" />
-                    ) : isInfo ? (
-                      <Info className="h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
-                    ) : (
-                      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    )}
+                    <div
+                      className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${
+                        isErr
+                          ? 'bg-rose-500/15 text-rose-400'
+                          : isInfo
+                          ? 'bg-[#2563EB]/20 text-blue-400'
+                          : 'bg-[#CCFF00]/15 text-[#CCFF00]'
+                      }`}
+                    >
+                      {isErr ? (
+                        <AlertCircle className="h-4 w-4" />
+                      ) : isInfo ? (
+                        <Info className="h-4 w-4" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                    </div>
 
-                    <span className="flex-1 leading-snug">{t.message}</span>
+                    <span className="flex-1 leading-snug text-slate-100">
+                      {t.message}
+                    </span>
 
                     <button
                       type="button"
                       onClick={() => removeToast(t.id)}
-                      className="inline-flex min-h-[32px] min-w-[32px] items-center justify-center rounded-lg opacity-60 transition hover:opacity-100"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
                       aria-label="Cerrar notificación"
                     >
                       <X className="h-3.5 w-3.5" />

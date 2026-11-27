@@ -88,33 +88,33 @@ export default function Navbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/80 pt-[env(safe-area-inset-top)] backdrop-blur-md transition-colors duration-300 dark:border-slate-800/80 dark:bg-slate-950/75">
+      <header className="sticky top-0 z-30 border-b border-white/[0.08] bg-[#141923]/90 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
           <motion.button
             type="button"
             onClick={onGoHome}
             whileTap={{ scale: 0.97 }}
-            className="group flex min-h-[44px] items-center gap-2.5 text-left"
+            className="group flex min-h-[44px] items-center gap-3 text-left"
           >
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/25">
-              <Trophy className="h-5 w-5" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#CCFF00] text-[#0B0E14] shadow-[0_0_20px_-4px_rgba(204,255,0,0.45)] transition-transform duration-200 group-hover:scale-105">
+              <Trophy className="h-5 w-5 stroke-[2.4]" />
             </div>
-            <div>
-              <span className="block text-base font-extrabold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-emerald-400">
+            <div className="leading-tight">
+              <span className="block text-base font-extrabold tracking-tight text-white uppercase transition-colors group-hover:text-[#CCFF00]">
                 AppTorneos
               </span>
-              <span className="hidden text-xs text-slate-500 sm:block dark:text-slate-400">
+              <span className="hidden text-[10px] font-bold tracking-wider text-slate-400 uppercase sm:block">
                 Torneos entre amigos
               </span>
             </div>
           </motion.button>
 
-          <div className="flex items-center gap-1.5 sm:gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2">
             {onToggleTheme && (
               <motion.button
                 type="button"
                 onClick={onToggleTheme}
-                whileTap={{ scale: 0.94 }}
+                whileTap={{ scale: 0.95 }}
                 aria-label={
                   isDark
                     ? 'Cambiar a modo Clean Glass'
@@ -125,7 +125,7 @@ export default function Navbar({
                     ? 'Cambiar a Clean Glass Light'
                     : 'Cambiar a Arena Dark'
                 }
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-slate-100/80 px-2.5 py-2 text-xs font-bold text-slate-700 transition hover:border-emerald-500/40 hover:bg-white dark:border-slate-700/80 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:border-amber-400/40 dark:hover:bg-slate-800"
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/5 px-2.5 py-2 text-[11px] font-bold tracking-wider text-slate-300 uppercase transition hover:border-white/15 hover:bg-white/10 hover:text-white"
               >
                 <AnimatePresence mode="wait" initial={false}>
                   {isDark ? (
@@ -135,10 +135,12 @@ export default function Navbar({
                       animate={{ rotate: 0, opacity: 1, scale: 1 }}
                       exit={{ rotate: 70, opacity: 0, scale: 0.7 }}
                       transition={{ duration: 0.16 }}
-                      className="inline-flex items-center gap-1.5 text-amber-300"
+                      className="inline-flex items-center gap-1.5 text-[#CCFF00]"
                     >
                       <Sun className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline">Clean Glass</span>
+                      <span className="hidden text-slate-200 md:inline">
+                        Clean Glass
+                      </span>
                     </motion.span>
                   ) : (
                     <motion.span
@@ -147,10 +149,10 @@ export default function Navbar({
                       animate={{ rotate: 0, opacity: 1, scale: 1 }}
                       exit={{ rotate: -70, opacity: 0, scale: 0.7 }}
                       transition={{ duration: 0.16 }}
-                      className="inline-flex items-center gap-1.5 text-indigo-600"
+                      className="inline-flex items-center gap-1.5 text-[#2563EB]"
                     >
                       <Moon className="h-3.5 w-3.5" />
-                      <span className="hidden md:inline text-slate-700">
+                      <span className="hidden text-slate-200 md:inline">
                         Arena Dark
                       </span>
                     </motion.span>
@@ -162,9 +164,9 @@ export default function Navbar({
             {canShowInstallButton && (
               <motion.button
                 type="button"
-                whileTap={{ scale: 0.95 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={handleInstallClick}
-                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"
+                className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-[#CCFF00]/30 bg-[#CCFF00]/10 px-3 py-2 text-[11px] font-extrabold tracking-wider text-[#CCFF00] uppercase transition hover:bg-[#CCFF00]/20"
               >
                 <Download className="h-3.5 w-3.5" />
                 <span className="hidden sm:inline">Instalar App</span>
@@ -175,10 +177,10 @@ export default function Navbar({
             {onOpenProfile && (
               <motion.button
                 type="button"
-                whileTap={{ scale: 0.96 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={onOpenProfile}
                 aria-label="Editar mi perfil y avatar"
-                className="inline-flex min-h-[44px] items-center gap-2 rounded-xl border border-slate-200/80 bg-slate-50/80 px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-emerald-400/60 hover:bg-white dark:border-slate-800 dark:bg-slate-900/80 dark:text-slate-200 dark:hover:bg-slate-800"
+                className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-white/[0.08] bg-white/5 px-2.5 py-1.5 text-xs font-bold text-white transition hover:border-[#CCFF00]/40 hover:bg-white/10"
               >
                 <Avatar
                   name={displayName}
@@ -193,10 +195,10 @@ export default function Navbar({
 
             <motion.button
               type="button"
-              whileTap={{ scale: 0.95 }}
+              whileTap={{ scale: 0.96 }}
               onClick={onSignOut}
               disabled={signingOut}
-              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 hover:text-slate-900 disabled:cursor-not-allowed disabled:opacity-60 sm:text-sm dark:border-slate-800 dark:bg-slate-900/90 dark:text-slate-200 dark:hover:bg-slate-800"
+              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/5 px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-rose-500/30 hover:bg-rose-500/15 hover:text-rose-300 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <LogOut className="h-4 w-4" />
               <span className="hidden sm:inline">
@@ -217,7 +219,7 @@ export default function Navbar({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.18 }}
-                className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/60 p-4 backdrop-blur-sm sm:items-center"
+                className="fixed inset-0 z-[100] flex items-end justify-center bg-[#0B0E14]/80 p-4 backdrop-blur-md sm:items-center"
                 onClick={(e) => {
                   if (e.target === e.currentTarget) setShowIosGuide(false);
                 }}
@@ -227,58 +229,63 @@ export default function Navbar({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 16, scale: 0.96 }}
                   transition={{ type: 'spring', stiffness: 380, damping: 28 }}
-                  className="glass-card w-full max-w-sm rounded-3xl p-5 shadow-2xl"
+                  className="w-full max-w-sm rounded-2xl border border-white/[0.08] bg-[#141923] p-5 shadow-2xl"
                 >
-                  <div className="mb-3 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                  <div className="mb-4 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#CCFF00]/25 bg-[#CCFF00]/15 text-[#CCFF00]">
                         <Smartphone className="h-4 w-4" />
                       </div>
-                      <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                        Instalar en iPhone / iPad
-                      </h3>
+                      <div>
+                        <p className="text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                          Acceso directo PWA
+                        </p>
+                        <h3 className="text-sm font-extrabold tracking-tight text-white uppercase">
+                          Instalar en iPhone / iPad
+                        </h3>
+                      </div>
                     </div>
                     <button
                       type="button"
                       onClick={() => setShowIosGuide(false)}
-                      className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.08] bg-white/5 text-slate-400 transition hover:bg-white/10 hover:text-white"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
 
-                  <ol className="space-y-2.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                  <ol className="space-y-3 text-xs leading-relaxed text-slate-300">
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#CCFF00] font-mono text-[11px] font-extrabold text-[#0B0E14] tabular-nums">
                         1
                       </span>
                       <span>
                         En la barra de Safari, toca el botón{' '}
-                        <strong className="inline-flex items-center gap-1 text-slate-900 dark:text-white">
-                          <Share className="h-3.5 w-3.5 text-sky-500" />
+                        <strong className="inline-flex items-center gap-1 font-bold text-white">
+                          <Share className="h-3.5 w-3.5 text-[#2563EB]" />
                           Compartir
                         </strong>
                         .
                       </span>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#CCFF00] font-mono text-[11px] font-extrabold text-[#0B0E14] tabular-nums">
                         2
                       </span>
                       <span>
                         Desliza hacia abajo y selecciona{' '}
-                        <strong className="text-slate-900 dark:text-white">
+                        <strong className="font-bold text-white">
                           &quot;Agregar a inicio&quot;
                         </strong>
                         .
                       </span>
                     </li>
-                    <li className="flex items-start gap-2">
-                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    <li className="flex items-start gap-2.5">
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#CCFF00] font-mono text-[11px] font-extrabold text-[#0B0E14] tabular-nums">
                         3
                       </span>
                       <span>
-                        Toca <strong className="text-slate-900 dark:text-white">Agregar</strong> y
+                        Toca <strong className="font-bold text-white">Agregar</strong> y
                         se abrirá como app nativa sin barra de navegador.
                       </span>
                     </li>
