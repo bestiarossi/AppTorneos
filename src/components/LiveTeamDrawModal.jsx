@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check,
   FastForward,
+  Gauge,
   Layers,
   Pause,
   Play,
@@ -26,6 +27,36 @@ const TEAM_ACCENT_COLORS = [
   'border-cyan-400/70 bg-cyan-500/10 text-cyan-800 dark:border-cyan-400/50 dark:bg-cyan-500/15 dark:text-cyan-300 classic:border-[#2D6A4F] classic:bg-[#2D6A4F]/15 classic:text-[#1E4638]',
 ];
 
+const SPEED_OPTIONS = [
+  {
+    id: 'slow',
+    label: 'Lento',
+    steps: 18,
+    baseDelay: 75,
+    maxDelay: 320,
+    lockBeat: 360,
+    autoPause: 1800,
+  },
+  {
+    id: 'normal',
+    label: 'Normal',
+    steps: 14,
+    baseDelay: 58,
+    maxDelay: 230,
+    lockBeat: 260,
+    autoPause: 1150,
+  },
+  {
+    id: 'fast',
+    label: 'Rápido',
+    steps: 9,
+    baseDelay: 45,
+    maxDelay: 140,
+    lockBeat: 180,
+    autoPause: 550,
+  },
+];
+
 export default function LiveTeamDrawModal({
   isOpen,
   onClose,
@@ -40,12 +71,19 @@ export default function LiveTeamDrawModal({
   const [revealedCount, setRevealedCount] = useState(0);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rouletteName, setRouletteName] = useState('');
+  const [rouletteLocked, setRouletteLocked] = useState(false);
+  const [spinningTeamName, setSpinningTeamName] = useState('');
   const [lastRevealed, setLastRevealed] = useState(null);
   const [autoPlay, setAutoPlay] = useState(false);
+  const [speedId, setSpeedId] = useState('normal');
 
-  const spinIntervalRef = useRef(null);
-  const spinTimeoutRef = useRef(null);
+  const timersRef = useRef([]);
   const autoTimerRef = useRef(null);
+
+  const activeSpeed = useMemo(
+    () => SPEED_OPTIONS.find((s) => s.id === speedId) || SPEED_OPTIONS[1],
+    [speedId]
+  );
 
   const participantMap = useMemo(
     () => new Map(participants.map((p) => [p.id, p])),
@@ -78,14 +116,8 @@ export default function LiveTeamDrawModal({
   const isFinished = totalToDraw > 0 && revealedCount >= totalToDraw;
 
   const clearTimers = useCallback(() => {
-    if (spinIntervalRef.current) {
-      clearInterval(spinIntervalRef.current);
-      spinIntervalRef.current = null;
-    }
-    if (spinTimeoutRef.current) {
-      clearTimeout(spinTimeoutRef.current);
-      spinTimeoutRef.current = null;
-    }
+    timersRef.current.forEach((id) => clearTimeout(id));
+    timersRef.current = [];
     if (autoTimerRef.current) {
       clearTimeout(autoTimerRef.current);
       autoTimerRef.current = null;
@@ -99,6 +131,8 @@ export default function LiveTeamDrawModal({
     setRevealedCount(0);
     setIsSpinning(false);
     setRouletteName('');
+    setRouletteLocked(false);
+    setSpinningTeamName('');
     setLastRevealed(null);
     setAutoPlay(false);
   }, [isOpen, targetAssignments, clearTimers]);
@@ -119,48 +153,96 @@ export default function LiveTeamDrawModal({
     const nextItem = drawQueue[revealedCount];
     if (!nextItem) return;
 
-    const remainingPool = drawQueue
+    const winnerName =
+      participantMap.get(nextItem.participantId)?.name || 'Jugador';
+    const targetTeamName = teamMap.get(nextItem.teamId)?.name || 'Equipo';
+
+    const remainingNames = drawQueue
       .slice(revealedCount)
       .map((item) => participantMap.get(item.participantId)?.name || 'Jugador');
 
+    const otherNames = remainingNames.filter((n) => n !== winnerName);
+
     setIsSpinning(true);
+    setRouletteLocked(false);
+    setSpinningTeamName(targetTeamName);
 
-    let tick = 0;
-    spinIntervalRef.current = setInterval(() => {
-      const candidate =
-        remainingPool[tick % Math.max(remainingPool.length, 1)] || '...';
-      setRouletteName(candidate);
-      tick += 1;
-    }, 65);
+    // Si solo queda 1 jugador, gira breve y clava directo en el elegido
+    const totalSteps =
+      remainingNames.length <= 1 ? 3 : activeSpeed.steps;
 
-    const spinDuration = remainingPool.length <= 1 ? 450 : 950;
-
-    spinTimeoutRef.current = setTimeout(() => {
-      if (spinIntervalRef.current) {
-        clearInterval(spinIntervalRef.current);
-        spinIntervalRef.current = null;
+    // Construimos la secuencia exacta garantizando que el ÚLTIMO nombre sea winnerName
+    const sequence = [];
+    for (let i = 0; i < totalSteps - 1; i += 1) {
+      if (otherNames.length > 0) {
+        // Evitar repetir el mismo nombre dos ticks seguidos cuando hay opciones
+        const pool = remainingNames.length > 1 ? remainingNames : [winnerName];
+        let pick = pool[i % pool.length];
+        // En el penúltimo paso, forzamos que sea distinto al ganador para que el salto final se note
+        if (i === totalSteps - 2 && pick === winnerName) {
+          pick = otherNames[i % otherNames.length];
+        }
+        sequence.push(pick);
+      } else {
+        sequence.push(winnerName);
       }
+    }
+    sequence.push(winnerName);
 
+    let elapsed = 0;
+    sequence.forEach((candidateName, stepIdx) => {
+      const progress = stepIdx / Math.max(1, sequence.length - 1);
+      // Curva cuadrática para que frene suavemente al final
+      const stepDelay = Math.round(
+        activeSpeed.baseDelay +
+          (activeSpeed.maxDelay - activeSpeed.baseDelay) * progress * progress
+      );
+
+      const tId = setTimeout(() => {
+        setRouletteName(candidateName);
+        if (stepIdx === sequence.length - 1) {
+          setRouletteLocked(true);
+        }
+      }, elapsed);
+
+      timersRef.current.push(tId);
+      elapsed += stepDelay;
+    });
+
+    // Breve pausa viendo el nombre clavado antes de mostrar la tarjeta con el avatar
+    const finishId = setTimeout(() => {
       const nextCount = revealedCount + 1;
       setRevealedCount(nextCount);
       setLastRevealed(nextItem);
       setRouletteName('');
+      setRouletteLocked(false);
+      setSpinningTeamName('');
       setIsSpinning(false);
 
       if (nextCount >= totalToDraw) {
         setAutoPlay(false);
         triggerChampionConfetti();
       }
-    }, spinDuration);
-  }, [isSpinning, revealedCount, totalToDraw, drawQueue, participantMap]);
+    }, elapsed + activeSpeed.lockBeat);
 
-  // Modo automático
+    timersRef.current.push(finishId);
+  }, [
+    isSpinning,
+    revealedCount,
+    totalToDraw,
+    drawQueue,
+    participantMap,
+    teamMap,
+    activeSpeed,
+  ]);
+
+  // Modo automático respetando la velocidad elegida
   useEffect(() => {
     if (!isOpen || !autoPlay || isSpinning || isFinished) return;
 
     autoTimerRef.current = setTimeout(() => {
       drawNextPlayer();
-    }, 650);
+    }, activeSpeed.autoPause);
 
     return () => {
       if (autoTimerRef.current) {
@@ -168,13 +250,23 @@ export default function LiveTeamDrawModal({
         autoTimerRef.current = null;
       }
     };
-  }, [isOpen, autoPlay, isSpinning, isFinished, revealedCount, drawNextPlayer]);
+  }, [
+    isOpen,
+    autoPlay,
+    isSpinning,
+    isFinished,
+    revealedCount,
+    activeSpeed.autoPause,
+    drawNextPlayer,
+  ]);
 
   function handleSkipToEnd() {
     clearTimers();
     setIsSpinning(false);
     setAutoPlay(false);
     setRouletteName('');
+    setRouletteLocked(false);
+    setSpinningTeamName('');
     setRevealedCount(totalToDraw);
     setLastRevealed(drawQueue[totalToDraw - 1] || null);
     triggerChampionConfetti();
@@ -196,6 +288,9 @@ export default function LiveTeamDrawModal({
   }, [teams, drawQueue, revealedCount]);
 
   const currentNextItem = drawQueue[revealedCount] || null;
+  const upcomingTeamName = currentNextItem
+    ? teamMap.get(currentNextItem.teamId)?.name || 'Equipo'
+    : '';
   const activePotLabel =
     currentNextItem && currentNextItem.potNumber < 999
       ? `Bombo ${currentNextItem.potNumber}`
@@ -267,7 +362,7 @@ export default function LiveTeamDrawModal({
                 <div className="pointer-events-none absolute -top-20 left-1/2 h-44 w-72 -translate-x-1/2 rounded-full bg-[#CCFF00]/15 blur-3xl classic:bg-[#D9A441]/25" />
 
                 <div className="relative z-10 flex flex-col items-center">
-                  <div className="mb-3 flex items-center gap-2">
+                  <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
                     <span className="rounded-full border border-white/15 bg-white/10 px-3 py-0.5 font-mono text-[11px] font-bold text-slate-200 tabular-nums">
                       {revealedCount} / {totalToDraw} sorteados
                     </span>
@@ -278,23 +373,49 @@ export default function LiveTeamDrawModal({
                     )}
                   </div>
 
-                  <div className="flex min-h-[112px] w-full max-w-md flex-col items-center justify-center">
+                  {/* Banner claro del equipo destino ANTES y DURANTE el giro */}
+                  {!isFinished && (isSpinning || upcomingTeamName) && (
+                    <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#CCFF00]/40 bg-[#CCFF00]/15 px-4 py-1 text-xs font-black tracking-wider text-[#CCFF00] uppercase classic:border-[#D9A441] classic:bg-[#D9A441]/20 classic:text-[#FBF5E8]">
+                      <Users className="h-3.5 w-3.5" />
+                      <span>
+                        {isSpinning
+                          ? `Al ${spinningTeamName} va...`
+                          : `Siguiente para ${upcomingTeamName}`}
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="flex min-h-[108px] w-full max-w-md flex-col items-center justify-center">
                     <AnimatePresence mode="wait">
                       {isSpinning ? (
                         <motion.div
                           key="spinning"
-                          initial={{ opacity: 0, scale: 0.9 }}
+                          initial={{ opacity: 0, scale: 0.92 }}
                           animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 1.08 }}
+                          exit={{ opacity: 0, scale: 1.06 }}
                           className="flex flex-col items-center"
                         >
-                          <span className="text-[10px] font-bold tracking-widest text-[#CCFF00] uppercase classic:text-[#D9A441]">
-                            Girando bolillero...
+                          <span className="text-[10px] font-bold tracking-widest text-slate-400 uppercase">
+                            {rouletteLocked
+                              ? '¡Bolilla elegida!'
+                              : 'Girando bolillero...'}
                           </span>
                           <motion.p
-                            animate={{ y: [0, -3, 0] }}
-                            transition={{ repeat: Infinity, duration: 0.16 }}
-                            className="mt-2 text-2xl font-black tracking-tight text-white uppercase sm:text-3xl"
+                            animate={
+                              rouletteLocked
+                                ? { scale: [1, 1.12, 1.04] }
+                                : { y: [0, -2, 0] }
+                            }
+                            transition={
+                              rouletteLocked
+                                ? { duration: 0.25 }
+                                : { repeat: Infinity, duration: 0.16 }
+                            }
+                            className={`mt-2 text-2xl font-black tracking-tight uppercase sm:text-3xl ${
+                              rouletteLocked
+                                ? 'text-[#CCFF00] classic:text-[#D9A441]'
+                                : 'text-white'
+                            }`}
                           >
                             {rouletteName || '...'}
                           </motion.p>
@@ -320,10 +441,10 @@ export default function LiveTeamDrawModal({
                       ) : lastRevealed ? (
                         <motion.div
                           key={`revealed-${lastRevealed.participantId}`}
-                          initial={{ opacity: 0, scale: 0.72, y: 14 }}
+                          initial={{ opacity: 0, scale: 0.82, y: 10 }}
                           animate={{ opacity: 1, scale: 1, y: 0 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ type: 'spring', stiffness: 420, damping: 22 }}
+                          exit={{ opacity: 0, scale: 0.92 }}
+                          transition={{ type: 'spring', stiffness: 420, damping: 24 }}
                           className="flex flex-col items-center"
                         >
                           <div className="flex items-center gap-3">
@@ -346,7 +467,7 @@ export default function LiveTeamDrawModal({
                                 }
                               </p>
                               <p className="mt-0.5 text-xs font-extrabold tracking-wider text-[#CCFF00] uppercase classic:text-[#D9A441]">
-                                → Va para{' '}
+                                ✓ Asignado a{' '}
                                 {teamMap.get(lastRevealed.teamId)?.name ||
                                   'Equipo'}
                               </p>
@@ -364,64 +485,91 @@ export default function LiveTeamDrawModal({
                             ¿Listos para el sorteo?
                           </p>
                           <p className="mt-1 text-xs text-slate-300">
-                            Tocá <strong>Sacar bolilla</strong> o activá el modo{' '}
-                            <strong>Automático</strong> para ir revelando uno por uno.
+                            Tocá <strong>Sacar bolilla</strong> o activá{' '}
+                            <strong>Automático</strong> a la velocidad que prefieras.
                           </p>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  {/* Controles del Bolillero */}
+                  {/* Controles del Bolillero + Selector de velocidad */}
                   {!isFinished && (
-                    <div className="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        disabled={isSpinning}
-                        onClick={drawNextPlayer}
-                        className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#CCFF00] px-5 py-2.5 text-xs font-black tracking-wider text-[#0B0E14] uppercase shadow-lg shadow-[#CCFF00]/20 transition hover:bg-[#d9ff33] disabled:opacity-50 classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-none"
-                      >
-                        <Sparkles className="h-4 w-4" />
-                        <span>
-                          {revealedCount === 0
-                            ? 'Sacar primera bolilla'
-                            : 'Sacar siguiente'}
+                    <div className="mt-5 flex flex-col items-center gap-3">
+                      <div className="flex flex-wrap items-center justify-center gap-2.5">
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.96 }}
+                          disabled={isSpinning}
+                          onClick={drawNextPlayer}
+                          className="inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-[#CCFF00] px-5 py-2.5 text-xs font-black tracking-wider text-[#0B0E14] uppercase shadow-lg shadow-[#CCFF00]/20 transition hover:bg-[#d9ff33] disabled:opacity-50 classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-none"
+                        >
+                          <Sparkles className="h-4 w-4" />
+                          <span>
+                            {revealedCount === 0
+                              ? 'Sacar primera bolilla'
+                              : 'Sacar siguiente'}
+                          </span>
+                        </motion.button>
+
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.96 }}
+                          onClick={() => setAutoPlay((prev) => !prev)}
+                          className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-extrabold tracking-wider uppercase transition ${
+                            autoPlay
+                              ? 'border-amber-400/60 bg-amber-400/20 text-amber-200'
+                              : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
+                          }`}
+                        >
+                          {autoPlay ? (
+                            <>
+                              <Pause className="h-3.5 w-3.5" />
+                              <span>Pausar</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="h-3.5 w-3.5" />
+                              <span>Automático</span>
+                            </>
+                          )}
+                        </motion.button>
+
+                        <motion.button
+                          type="button"
+                          whileTap={{ scale: 0.96 }}
+                          onClick={handleSkipToEnd}
+                          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
+                        >
+                          <FastForward className="h-3.5 w-3.5" />
+                          <span>Revelar todo</span>
+                        </motion.button>
+                      </div>
+
+                      {/* Selector de velocidad */}
+                      <div className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 p-1">
+                        <span className="inline-flex items-center gap-1 px-2 text-[10px] font-bold tracking-wider text-slate-400 uppercase">
+                          <Gauge className="h-3 w-3" />
+                          <span>Velocidad</span>
                         </span>
-                      </motion.button>
-
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => setAutoPlay((prev) => !prev)}
-                        className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-4 py-2.5 text-xs font-extrabold tracking-wider uppercase transition ${
-                          autoPlay
-                            ? 'border-amber-400/60 bg-amber-400/20 text-amber-200'
-                            : 'border-white/15 bg-white/10 text-white hover:bg-white/15'
-                        }`}
-                      >
-                        {autoPlay ? (
-                          <>
-                            <Pause className="h-3.5 w-3.5" />
-                            <span>Pausar</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="h-3.5 w-3.5" />
-                            <span>Automático</span>
-                          </>
-                        )}
-                      </motion.button>
-
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.96 }}
-                        onClick={handleSkipToEnd}
-                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3.5 py-2.5 text-xs font-bold text-slate-300 transition hover:bg-white/10 hover:text-white"
-                      >
-                        <FastForward className="h-3.5 w-3.5" />
-                        <span>Revelar todo</span>
-                      </motion.button>
+                        {SPEED_OPTIONS.map((opt) => {
+                          const active = speedId === opt.id;
+                          return (
+                            <button
+                              key={opt.id}
+                              type="button"
+                              onClick={() => setSpeedId(opt.id)}
+                              className={`min-h-[30px] rounded-lg px-2.5 py-1 text-[11px] font-extrabold tracking-wide uppercase transition ${
+                                active
+                                  ? 'bg-[#CCFF00] text-[#0B0E14] classic:bg-[#D9A441] classic:text-[#1E4638]'
+                                  : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -433,6 +581,11 @@ export default function LiveTeamDrawModal({
                   const members = revealedByTeam.get(team.id) || [];
                   const accentClass =
                     TEAM_ACCENT_COLORS[idx % TEAM_ACCENT_COLORS.length];
+                  const isTargetNow =
+                    !isFinished &&
+                    (isSpinning
+                      ? spinningTeamName === team.name
+                      : currentNextItem?.teamId === team.id);
                   const isJustUpdated =
                     lastRevealed?.teamId === team.id && !isSpinning;
 
@@ -445,8 +598,8 @@ export default function LiveTeamDrawModal({
                       }
                       transition={{ duration: 0.3 }}
                       className={`rounded-2xl border p-3.5 transition ${
-                        isJustUpdated
-                          ? 'border-emerald-400 bg-emerald-50/50 shadow-md dark:border-[#CCFF00]/60 dark:bg-[#CCFF00]/[0.06] classic:border-2 classic:border-[#D46F4D] classic:bg-[#FBF5E8]'
+                        isTargetNow
+                          ? 'border-emerald-400 bg-emerald-50/50 shadow-md dark:border-[#CCFF00]/65 dark:bg-[#CCFF00]/[0.07] classic:border-2 classic:border-[#D46F4D] classic:bg-[#FBF5E8]'
                           : 'border-slate-200/90 bg-white/80 dark:border-white/[0.08] dark:bg-white/[0.03] classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8]'
                       }`}
                     >
