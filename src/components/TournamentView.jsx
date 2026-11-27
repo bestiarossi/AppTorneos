@@ -8,6 +8,7 @@ import {
   BarChart3,
   Camera,
   Check,
+  ChevronDown,
   Copy,
   Crown,
   Eye,
@@ -143,6 +144,7 @@ export default function TournamentView({
   const [error, setError] = useState('');
 
   const [activeTab, setActiveTab] = useState('standings');
+  const [mobileHeaderExpanded, setMobileHeaderExpanded] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [regeneratingCode, setRegeneratingCode] = useState(false);
@@ -456,6 +458,7 @@ export default function TournamentView({
   useEffect(() => {
     setSelectedSubtournamentId(null);
     setIsPotModalOpen(false);
+    setMobileHeaderExpanded(false);
     loadTournamentData();
   }, [loadTournamentData]);
 
@@ -1321,6 +1324,7 @@ export default function TournamentView({
     setEditNotes(cfg.notes || '');
     setEditAllowSelfJoin(cfg.allow_self_join !== false);
     setIsEditingTournament(true);
+    setMobileHeaderExpanded(true);
   }
 
   async function handleSaveTournamentEdit(e) {
@@ -1421,16 +1425,16 @@ export default function TournamentView({
         <button
           type="button"
           onClick={onBack}
-          className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white"
+          className="mb-4 inline-flex min-h-[44px] items-center gap-1.5 text-sm font-bold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white classic:text-[#1E4638]"
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Volver a mis torneos</span>
         </button>
 
-        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700">
+        <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-5 text-sm text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
           <div>
-            <p className="font-semibold">No se pudo abrir el torneo</p>
+            <p className="font-bold">No se pudo abrir el torneo</p>
             <p className="mt-1">{error}</p>
           </div>
         </div>
@@ -1445,19 +1449,20 @@ export default function TournamentView({
   const activeTabMeta = TABS.find((t) => t.id === activeTab) || TABS[0];
   const ActiveTabIcon = activeTabMeta.icon;
   const openPollsCount = prodePolls.filter((p) => p.status === 'open').length;
+  const showMobileDetails = mobileHeaderExpanded || isEditingTournament;
 
   return (
     <>
-      <main className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-8 md:pb-8">
-        <div className="mb-4">
+      <main className="mx-auto max-w-6xl px-4 py-4 pb-28 sm:px-6 sm:py-6 md:pb-8">
+        <div className="mb-3">
           <motion.button
             type="button"
             whileTap={{ scale: 0.97 }}
             onClick={onBack}
-            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800/70 dark:hover:text-white"
+            className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-extrabold tracking-wider text-slate-600 uppercase transition hover:bg-slate-200/60 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white classic:text-[#1E4638] classic:hover:bg-[#EFE2CC]"
           >
             <ArrowLeft className="h-4 w-4" />
-            <span>Volver a mis torneos</span>
+            <span>Mis torneos</span>
           </motion.button>
         </div>
 
@@ -1467,7 +1472,7 @@ export default function TournamentView({
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }}
-              className="mb-4 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700"
+              className="mb-4 flex items-center gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200"
             >
               <AlertCircle className="h-4 w-4 shrink-0" />
               <span>{error}</span>
@@ -1475,25 +1480,59 @@ export default function TournamentView({
           )}
         </AnimatePresence>
 
-        {/* Encabezado Broadcast Glass del Torneo */}
+        {/* Encabezado del Torneo — Compacto desplegable en móvil, completo en escritorio */}
         <motion.section
-          initial={{ opacity: 0, y: 12 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.28, ease: 'easeOut' }}
-          className="glass-card relative mb-6 overflow-hidden rounded-3xl p-5 sm:p-6"
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="glass-card relative mb-5 overflow-hidden rounded-2xl p-4 sm:p-5 lg:mb-6 lg:p-6"
         >
           <div
-            className={`pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${sportTheme.cardRibbon}`}
+            className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${sportTheme.cardRibbon}`}
           />
           <div
-            className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${sportTheme.heroGradient}`}
+            className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${sportTheme.heroGradient} classic:opacity-40`}
           />
 
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          {/* Barra compacta exclusiva de móvil: solo Nombre + botón desplegable */}
+          {!isEditingTournament && (
+            <div className="relative flex items-center justify-between gap-3 lg:hidden">
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="text-xl leading-none" aria-hidden="true">
+                  {sportTheme.emoji}
+                </span>
+                <h1 className="truncate text-lg font-black tracking-tight text-slate-900 uppercase sm:text-xl dark:text-white classic:text-[#1E4638]">
+                  {tournament.name}
+                </h1>
+              </div>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setMobileHeaderExpanded((prev) => !prev)}
+                aria-expanded={mobileHeaderExpanded}
+                className="inline-flex min-h-[38px] shrink-0 items-center gap-1 rounded-xl border border-slate-200/90 bg-white/85 px-2.5 py-1.5 text-[11px] font-extrabold tracking-wider text-slate-700 uppercase transition hover:bg-white dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC] classic:text-[#1E4638]"
+              >
+                <span>{mobileHeaderExpanded ? 'Ocultar' : 'Info'}</span>
+                <ChevronDown
+                  className={`h-3.5 w-3.5 transition-transform duration-200 ${
+                    mobileHeaderExpanded ? 'rotate-180' : ''
+                  }`}
+                />
+              </motion.button>
+            </div>
+          )}
+
+          {/* Contenido completo: desplegable en móvil, siempre visible en desktop */}
+          <div
+            className={`relative flex-col gap-5 lg:flex lg:flex-row lg:items-start lg:justify-between ${
+              showMobileDetails ? 'mt-4 flex border-t border-slate-200/70 pt-4 dark:border-white/[0.06] classic:border-[#1E4638]/15 lg:mt-0 lg:border-t-0 lg:pt-0' : 'hidden'
+            }`}
+          >
             <div className="flex-1">
-              <div className="mb-2.5 flex flex-wrap items-center gap-2">
+              <div className="mb-2.5 flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold ${roleMeta.badgeClass}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold uppercase ${roleMeta.badgeClass}`}
                 >
                   {membership.role === 'owner' ? (
                     <Crown className="h-3 w-3" />
@@ -1506,20 +1545,20 @@ export default function TournamentView({
                 </span>
 
                 <span
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-bold ${sportTheme.badgeClass}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${sportTheme.badgeClass}`}
                 >
                   <span>{sportTheme.emoji}</span>
                   <span>{sportTheme.label}</span>
                 </span>
 
                 <span
-                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${formatMeta.badgeClass}`}
+                  className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${formatMeta.badgeClass}`}
                 >
                   {formatMeta.label}
                 </span>
 
                 {tournament.created_at && (
-                  <span className="text-xs text-slate-400">
+                  <span className="text-[11px] font-medium text-slate-400 dark:text-slate-500 classic:text-[#4C6B5E]">
                     Creado el {formatShortDate(tournament.created_at)}
                   </span>
                 )}
@@ -1534,10 +1573,10 @@ export default function TournamentView({
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.18 }}
                     onSubmit={handleSaveTournamentEdit}
-                    className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 dark:border-slate-700/80 dark:bg-slate-900/80"
+                    className="mt-3 space-y-3 rounded-2xl border border-slate-200 bg-slate-50/90 p-4 dark:border-white/[0.08] dark:bg-[#0B0E14]/90 classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]"
                   >
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      <label className="mb-1 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
                         Nombre del torneo
                       </label>
                       <input
@@ -1546,12 +1585,12 @@ export default function TournamentView({
                         maxLength={80}
                         value={editTournamentName}
                         onChange={(e) => setEditTournamentName(e.target.value)}
-                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-semibold text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm"
+                        className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-base font-bold text-slate-900 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#141923] dark:text-white dark:focus:border-[#CCFF00]"
                       />
                     </div>
 
                     <div>
-                      <span className="mb-1.5 block text-xs font-semibold text-slate-600 dark:text-slate-300">
+                      <span className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
                         Deporte / Temática
                       </span>
                       <div className="flex flex-wrap gap-1.5">
@@ -1560,10 +1599,10 @@ export default function TournamentView({
                             key={sp.id}
                             type="button"
                             onClick={() => setEditSport(sp.id)}
-                            className={`inline-flex min-h-[44px] items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
+                            className={`inline-flex min-h-[40px] items-center gap-1 rounded-xl border px-2.5 py-1.5 text-xs font-bold transition ${
                               editSport === sp.id
-                                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 dark:text-emerald-200'
-                                : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                                ? 'border-emerald-500 bg-emerald-500/15 text-emerald-800 dark:border-[#CCFF00] dark:bg-[#CCFF00]/15 dark:text-[#CCFF00] classic:border-[#1E4638] classic:bg-[#1E4638] classic:text-[#FBF5E8]'
+                                : 'border-slate-200 bg-white text-slate-600 dark:border-white/[0.08] dark:bg-[#141923] dark:text-slate-300'
                             }`}
                           >
                             <span>{sp.emoji}</span>
@@ -1575,7 +1614,7 @@ export default function TournamentView({
 
                     {tournament.format === 'league' && (
                       <div className="flex flex-wrap gap-3">
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                        <label className="flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-white/[0.08] dark:bg-[#141923] dark:text-slate-200">
                           <input
                             type="checkbox"
                             checked={editHomeAndAway}
@@ -1591,14 +1630,14 @@ export default function TournamentView({
                           value={editRounds}
                           onChange={(e) => setEditRounds(e.target.value)}
                           placeholder="Jornadas (opcional)"
-                          className="w-44 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
+                          className="w-44 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-white/[0.08] dark:bg-[#141923] dark:text-white"
                         />
                       </div>
                     )}
 
                     {tournament.format === 'knockout' && (
                       <div className="flex flex-wrap gap-3">
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                        <label className="flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-white/[0.08] dark:bg-[#141923] dark:text-slate-200">
                           <input
                             type="checkbox"
                             checked={editHomeAndAway}
@@ -1607,7 +1646,7 @@ export default function TournamentView({
                           />
                           <span>Cruces ida y vuelta</span>
                         </label>
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                        <label className="flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-white/[0.08] dark:bg-[#141923] dark:text-slate-200">
                           <input
                             type="checkbox"
                             checked={editThirdPlace}
@@ -1628,7 +1667,7 @@ export default function TournamentView({
                           value={editInitialLives}
                           onChange={(e) => setEditInitialLives(e.target.value)}
                           placeholder="Vidas iniciales"
-                          className="w-36 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
+                          className="w-36 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-white/[0.08] dark:bg-[#141923] dark:text-white"
                         />
                         <input
                           type="number"
@@ -1637,7 +1676,7 @@ export default function TournamentView({
                           value={editRounds}
                           onChange={(e) => setEditRounds(e.target.value)}
                           placeholder="Máx. jornadas"
-                          className="w-40 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
+                          className="w-40 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-white/[0.08] dark:bg-[#141923] dark:text-white"
                         />
                       </div>
                     )}
@@ -1651,7 +1690,7 @@ export default function TournamentView({
                           value={editRounds}
                           onChange={(e) => setEditRounds(e.target.value)}
                           placeholder="Jornadas"
-                          className="w-32 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
+                          className="w-32 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-white/[0.08] dark:bg-[#141923] dark:text-white"
                         />
                         <input
                           type="text"
@@ -1659,12 +1698,12 @@ export default function TournamentView({
                           value={editNotes}
                           onChange={(e) => setEditNotes(e.target.value)}
                           placeholder="Regla o nota"
-                          className="min-w-[200px] flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs"
+                          className="min-w-[200px] flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-white/[0.08] dark:bg-[#141923] dark:text-white"
                         />
                       </div>
                     )}
 
-                    <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700">
+                    <label className="flex min-h-[42px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 dark:border-white/[0.08] dark:bg-[#141923] dark:text-slate-200">
                       <input
                         type="checkbox"
                         checked={editAllowSelfJoin}
@@ -1679,7 +1718,7 @@ export default function TournamentView({
                         whileTap={{ scale: 0.96 }}
                         type="submit"
                         disabled={savingTournament}
-                        className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+                        className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-sm hover:bg-emerald-700 disabled:opacity-60 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8]"
                       >
                         {savingTournament && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
                         <span>Guardar cambios</span>
@@ -1688,7 +1727,7 @@ export default function TournamentView({
                         type="button"
                         onClick={() => setIsEditingTournament(false)}
                         disabled={savingTournament}
-                        className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                        className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:border-white/[0.08] dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                       >
                         Cancelar
                       </button>
@@ -1702,7 +1741,7 @@ export default function TournamentView({
                     exit={{ opacity: 0 }}
                   >
                     <div className="flex flex-wrap items-center gap-3">
-                      <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl dark:text-white">
+                      <h1 className="hidden text-2xl font-black tracking-tight text-slate-900 uppercase sm:text-3xl lg:block dark:text-white classic:text-[#1E4638]">
                         {tournament.name}
                       </h1>
 
@@ -1712,7 +1751,7 @@ export default function TournamentView({
                             whileTap={{ scale: 0.95 }}
                             type="button"
                             onClick={openTournamentEdit}
-                            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-slate-700 dark:bg-slate-800/80 dark:text-slate-300"
+                            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900 dark:border-white/[0.08] dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC] classic:text-[#1E4638]"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                             <span>Editar</span>
@@ -1724,7 +1763,7 @@ export default function TournamentView({
                                 whileTap={{ scale: 0.95 }}
                                 type="button"
                                 onClick={() => setConfirmDeleteTournament(true)}
-                                className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-2 text-xs font-semibold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-slate-700 dark:bg-slate-800/80"
+                                className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-white/[0.08] dark:bg-white/5 dark:text-rose-400 dark:hover:bg-rose-500/15"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
                                 <span>Eliminar</span>
@@ -1733,16 +1772,16 @@ export default function TournamentView({
                               <motion.div
                                 initial={{ opacity: 0, scale: 0.95 }}
                                 animate={{ opacity: 1, scale: 1 }}
-                                className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 p-1.5"
+                                className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 p-1.5 dark:border-rose-500/35 dark:bg-rose-500/15"
                               >
-                                <span className="px-1.5 text-xs font-semibold text-rose-700">
+                                <span className="px-1.5 text-xs font-bold text-rose-700 dark:text-rose-200">
                                   ¿Eliminar torneo?
                                 </span>
                                 <button
                                   type="button"
                                   onClick={handleDeleteTournament}
                                   disabled={deletingTournament}
-                                  className="min-h-[44px] rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                                  className="min-h-[36px] rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
                                 >
                                   {deletingTournament ? 'Eliminando...' : 'Sí, eliminar'}
                                 </button>
@@ -1750,7 +1789,7 @@ export default function TournamentView({
                                   type="button"
                                   onClick={() => setConfirmDeleteTournament(false)}
                                   disabled={deletingTournament}
-                                  className="min-h-[44px] rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                                  className="min-h-[36px] rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200"
                                 >
                                   No
                                 </button>
@@ -1761,11 +1800,11 @@ export default function TournamentView({
                     </div>
 
                     {configItems.length > 0 && (
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-wrap gap-1.5">
                         {configItems.map((item, index) => (
                           <span
                             key={index}
-                            className="rounded-xl border border-slate-200/70 bg-slate-100/80 px-2.5 py-1 text-xs font-medium text-slate-700 dark:border-slate-700/70 dark:bg-slate-800/70 dark:text-slate-300"
+                            className="rounded-lg border border-slate-200/70 bg-slate-100/80 px-2.5 py-1 text-[11px] font-bold text-slate-700 dark:border-white/[0.06] dark:bg-white/[0.05] dark:text-slate-300 classic:border-[#1E4638]/20 classic:bg-[#EFE2CC] classic:text-[#1E4638]"
                           >
                             {item}
                           </span>
@@ -1783,10 +1822,10 @@ export default function TournamentView({
                             highlight
                           />
                           <div>
-                            <p className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                            <p className="text-[10px] font-extrabold tracking-wider text-amber-800 uppercase dark:text-amber-300 classic:text-[#7D5310]">
                               🏆 Campeón Oficial
                             </p>
-                            <p className="text-sm font-black text-slate-900 dark:text-white">
+                            <p className="text-sm font-black text-slate-900 dark:text-white classic:text-[#1E4638]">
                               {crownedChampion.name}
                             </p>
                           </div>
@@ -1796,7 +1835,7 @@ export default function TournamentView({
                           whileTap={{ scale: 0.94 }}
                           type="button"
                           onClick={triggerChampionConfetti}
-                          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-amber-500/20 px-3 py-1.5 text-xs font-extrabold text-amber-900 transition hover:bg-amber-500/30 dark:text-amber-200"
+                          className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl bg-amber-500/20 px-3 py-1.5 text-xs font-extrabold text-amber-900 transition hover:bg-amber-500/30 dark:text-amber-200 classic:border classic:border-[#1E4638] classic:bg-[#1E4638] classic:text-[#FBF5E8]"
                         >
                           <PartyPopper className="h-3.5 w-3.5" />
                           <span>Celebrar</span>
@@ -1808,9 +1847,9 @@ export default function TournamentView({
               </AnimatePresence>
             </div>
 
-            <div className="flex shrink-0 flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 backdrop-blur-sm sm:min-w-[270px] dark:border-slate-700/80 dark:bg-slate-900/75">
+            <div className="flex shrink-0 flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/85 p-3.5 backdrop-blur-sm sm:min-w-[270px] dark:border-white/[0.08] dark:bg-[#0B0E14]/85 classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <span className="text-[10px] font-extrabold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
                   Invitación al torneo
                 </span>
                 {isAdmin && (
@@ -1820,7 +1859,7 @@ export default function TournamentView({
                     disabled={regeneratingCode}
                     onClick={handleRegenerateInviteCode}
                     title="Regenerar código de invitación"
-                    className="inline-flex min-h-[44px] items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-semibold text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                    className="inline-flex min-h-[34px] items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-bold text-slate-500 transition hover:bg-slate-200/70 hover:text-slate-800 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-white/10 dark:hover:text-white classic:text-[#1E4638]"
                   >
                     <RefreshCw
                       className={`h-3.5 w-3.5 ${regeneratingCode ? 'animate-spin' : ''}`}
@@ -1831,17 +1870,17 @@ export default function TournamentView({
               </div>
 
               <div className="flex items-center justify-between gap-3">
-                <span className="font-mono text-lg font-extrabold tracking-widest text-slate-900 tabular-nums dark:text-emerald-300">
+                <span className="font-mono text-lg font-extrabold tracking-widest text-slate-900 tabular-nums dark:text-[#CCFF00] classic:text-[#1E4638]">
                   {tournament.invite_code}
                 </span>
                 <motion.button
                   whileTap={{ scale: 0.94 }}
                   type="button"
                   onClick={handleCopyInviteCode}
-                  className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                  className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
                     copiedCode
-                      ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30'
-                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                      ? 'bg-emerald-600 text-white shadow-sm dark:bg-[#CCFF00] dark:text-[#0B0E14]'
+                      : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8] classic:text-[#1E4638]'
                   }`}
                 >
                   {copiedCode ? (
@@ -1862,16 +1901,16 @@ export default function TournamentView({
                 whileTap={{ scale: 0.97 }}
                 type="button"
                 onClick={handleCopyInviteLink}
-                className={`inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-bold transition ${
+                className={`inline-flex min-h-[40px] w-full items-center justify-center gap-2 rounded-xl px-3.5 py-2 text-xs font-extrabold tracking-wider uppercase transition ${
                   copiedInviteLink
-                    ? 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/25'
-                    : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300'
+                    ? 'bg-emerald-600 text-white shadow-sm dark:bg-[#CCFF00] dark:text-[#0B0E14]'
+                    : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-[#CCFF00]/30 dark:bg-[#CCFF00]/12 dark:text-[#CCFF00] dark:hover:bg-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#1E4638]'
                 }`}
               >
                 {copiedInviteLink ? (
                   <>
                     <Check className="h-4 w-4" />
-                    <span>¡Link copiado para compartir!</span>
+                    <span>¡Link copiado!</span>
                   </>
                 ) : (
                   <>
@@ -1886,13 +1925,14 @@ export default function TournamentView({
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <motion.section
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.06 }}
+            transition={{ duration: 0.28, delay: 0.05 }}
             className="lg:col-span-8"
           >
-            <div className="glass-card overflow-hidden rounded-3xl">
-              <div className="relative hidden overflow-x-auto border-b border-slate-200/80 px-2 pt-2 md:flex dark:border-slate-800">
+            <div className="glass-card overflow-hidden rounded-2xl">
+              {/* Tabs escritorio */}
+              <div className="relative hidden overflow-x-auto border-b border-slate-200/80 px-2 pt-2 md:flex dark:border-white/[0.08] classic:border-[#1E4638]/20">
                 {TABS.map((tab) => {
                   const Icon = tab.icon;
                   const isActive = activeTab === tab.id;
@@ -1901,16 +1941,16 @@ export default function TournamentView({
                       key={tab.id}
                       type="button"
                       onClick={() => setActiveTab(tab.id)}
-                      className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 px-3.5 py-3 text-sm font-semibold transition ${
+                      className={`relative inline-flex min-h-[44px] shrink-0 items-center gap-1.5 px-3.5 py-3 text-xs font-extrabold tracking-wider uppercase transition ${
                         isActive
-                          ? 'text-emerald-700 dark:text-emerald-300'
-                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
+                          ? 'text-emerald-700 dark:text-[#CCFF00] classic:text-[#1E4638]'
+                          : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]'
                       }`}
                     >
                       <Icon className="relative z-10 h-4 w-4" />
                       <span className="relative z-10">{tab.label}</span>
                       {tab.id === 'predictions' && openPollsCount > 0 && (
-                        <span className="relative z-10 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 text-[10px] font-black text-white">
+                        <span className="relative z-10 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-emerald-500 px-1 font-mono text-[10px] font-black text-white tabular-nums dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:bg-[#D46F4D] classic:text-[#FBF5E8]">
                           {openPollsCount}
                         </span>
                       )}
@@ -1919,7 +1959,7 @@ export default function TournamentView({
                         <motion.div
                           layoutId="tournament-active-tab-pill"
                           transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                          className="absolute inset-x-1 top-1 bottom-0 rounded-t-xl border-b-2 border-emerald-500 bg-emerald-500/10 dark:bg-emerald-400/12"
+                          className="absolute inset-x-1 top-1 bottom-0 rounded-t-xl border-b-2 border-emerald-500 bg-emerald-500/10 dark:border-[#CCFF00] dark:bg-[#CCFF00]/10 classic:border-[#D46F4D] classic:bg-[#EFE2CC]"
                         />
                       )}
                     </button>
@@ -1927,19 +1967,20 @@ export default function TournamentView({
                 })}
               </div>
 
-              <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 md:hidden dark:border-slate-800">
+              {/* Barra compacta de sección activa en móvil */}
+              <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-2.5 md:hidden dark:border-white/[0.08] classic:border-[#1E4638]/20 classic:bg-[#EFE2CC]/60">
                 <div className="flex items-center gap-2">
-                  <ActiveTabIcon className="h-4 w-4 text-emerald-500" />
-                  <span className="text-sm font-extrabold text-slate-900 dark:text-white">
+                  <ActiveTabIcon className="h-4 w-4 text-emerald-600 dark:text-[#CCFF00] classic:text-[#D46F4D]" />
+                  <span className="text-xs font-extrabold tracking-wider text-slate-900 uppercase dark:text-white classic:text-[#1E4638]">
                     {activeTabMeta.label}
                   </span>
                 </div>
-                <span className="text-[11px] font-semibold text-slate-400">
-                  Navega abajo
+                <span className="text-[10px] font-bold tracking-wider text-slate-400 uppercase classic:text-[#4C6B5E]">
+                  Menú abajo
                 </span>
               </div>
 
-              <div className="p-4 sm:p-6">
+              <div className="p-4 sm:p-5">
                 <AnimatePresence mode="wait">
                   <motion.div
                     key={activeTab}
@@ -2089,12 +2130,12 @@ export default function TournamentView({
           </motion.section>
 
           <motion.aside
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: 0.12 }}
+            transition={{ duration: 0.28, delay: 0.1 }}
             className="lg:col-span-4"
           >
-            <div className="glass-card rounded-3xl p-5">
+            <div className="glass-card rounded-2xl p-5">
               <input
                 ref={participantAvatarInputRef}
                 type="file"
@@ -2104,9 +2145,14 @@ export default function TournamentView({
               />
 
               <div className="mb-4 flex items-center justify-between gap-2">
-                <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white">
-                  <Users className="h-4 w-4 text-emerald-500" />
-                  <span>Participantes ({enrichedParticipants.length})</span>
+                <h2 className="flex items-center gap-2 text-sm font-extrabold tracking-tight text-slate-900 uppercase dark:text-white classic:text-[#1E4638]">
+                  <Users className="h-4 w-4 text-emerald-500 dark:text-[#CCFF00] classic:text-[#D46F4D]" />
+                  <span>
+                    Participantes{' '}
+                    <span className="font-mono tabular-nums">
+                      ({enrichedParticipants.length})
+                    </span>
+                  </span>
                 </h2>
 
                 {tournament.format === 'custom' && (
@@ -2114,17 +2160,19 @@ export default function TournamentView({
                     whileTap={{ scale: 0.95 }}
                     type="button"
                     onClick={() => setIsPotModalOpen(true)}
-                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800 transition hover:bg-amber-100"
+                    className="inline-flex min-h-[38px] items-center gap-1 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-extrabold tracking-wider text-amber-800 uppercase transition hover:bg-amber-100 dark:border-amber-400/30 dark:bg-amber-400/12 dark:text-amber-300 classic:border-2 classic:border-[#1E4638] classic:bg-[#D9A441]/35 classic:text-[#1E4638]"
                   >
                     <Layers className="h-3.5 w-3.5" />
-                    <span>Bombos ({potSets.length})</span>
+                    <span className="font-mono tabular-nums">
+                      Bombos ({potSets.length})
+                    </span>
                   </motion.button>
                 )}
               </div>
 
               {!myLinkedParticipant &&
                 enrichedParticipants.some((p) => !p.user_id) && (
-                  <div className="mb-4 rounded-2xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800">
+                  <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:border-[#2563EB]/35 dark:bg-[#2563EB]/15 dark:text-blue-200 classic:border-2 classic:border-[#D46F4D] classic:bg-[#D46F4D]/12 classic:text-[#1E4638]">
                     ¿Tu nombre ya está en la lista? Toca{' '}
                     <strong>Vincularme</strong> para asociar tu cuenta y tu avatar.
                   </div>
@@ -2141,19 +2189,19 @@ export default function TournamentView({
                       if (participantActionError) setParticipantActionError('');
                     }}
                     placeholder="Agregar participante..."
-                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm"
+                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4]"
                   />
                   <motion.button
                     whileTap={{ scale: 0.95 }}
                     type="submit"
                     disabled={addingParticipant}
-                    className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm shadow-emerald-600/25 transition hover:bg-emerald-700 disabled:opacity-60"
+                    className="inline-flex min-h-[42px] shrink-0 items-center gap-1 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-sm transition hover:bg-emerald-700 disabled:opacity-60 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#1E4638] classic:text-[#FBF5E8]"
                     aria-label="Agregar participante"
                   >
                     {addingParticipant ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <Plus className="h-4 w-4" />
+                      <Plus className="h-4 w-4 stroke-[2.5]" />
                     )}
                     <span>Agregar</span>
                   </motion.button>
@@ -2161,20 +2209,20 @@ export default function TournamentView({
               )}
 
               {participantActionError && (
-                <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+                <div className="mb-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
                   <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
                   <span>{participantActionError}</span>
                 </div>
               )}
 
               {enrichedParticipants.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500">
+                <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center text-xs text-slate-500 dark:border-white/10 dark:bg-white/[0.03] dark:text-slate-400">
                   {isAdmin
                     ? 'Aún no hay participantes. Usa el campo de arriba para agregar jugadores.'
                     : 'El administrador todavía no agregó participantes al torneo.'}
                 </div>
               ) : (
-                <ul className="space-y-2.5">
+                <ul className="space-y-2">
                   <AnimatePresence initial={false}>
                     {enrichedParticipants.map((participant) => {
                       const isMine = participant.user_id === user.id;
@@ -2213,10 +2261,10 @@ export default function TournamentView({
                           animate={{ opacity: 1, y: 0, scale: 1 }}
                           exit={{ opacity: 0, scale: 0.94 }}
                           transition={{ duration: 0.2 }}
-                          className={`rounded-2xl border p-3 transition ${
+                          className={`rounded-xl border p-3 transition ${
                             isMine
-                              ? 'border-emerald-300/80 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/12'
-                              : 'border-slate-200/80 bg-white/70 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-900/60 dark:hover:border-slate-700'
+                              ? 'border-emerald-300/80 bg-emerald-50/60 dark:border-[#CCFF00]/35 dark:bg-[#CCFF00]/[0.08] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]'
+                              : 'border-slate-200/80 bg-white/70 hover:border-slate-300 dark:border-white/[0.07] dark:bg-white/[0.03] dark:hover:border-white/15 classic:border-[#1E4638]/20 classic:bg-[#FFFBF4]'
                           }`}
                         >
                           {isEditingThis ? (
@@ -2238,7 +2286,7 @@ export default function TournamentView({
                                       setEditingParticipantId(null);
                                     }
                                   }}
-                                  className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm"
+                                  className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-2.5 py-2 text-base text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-white/15 dark:bg-[#0B0E14] dark:text-white"
                                 />
                                 <button
                                   type="button"
@@ -2246,7 +2294,7 @@ export default function TournamentView({
                                   onClick={() =>
                                     handleSaveParticipantName(participant.id)
                                   }
-                                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg bg-emerald-600 p-2 text-white hover:bg-emerald-700 disabled:opacity-50"
+                                  className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg bg-emerald-600 p-2 text-white hover:bg-emerald-700 disabled:opacity-50 dark:bg-[#CCFF00] dark:text-[#0B0E14]"
                                   aria-label="Guardar nombre"
                                 >
                                   <Check className="h-4 w-4" />
@@ -2255,7 +2303,7 @@ export default function TournamentView({
                                   type="button"
                                   disabled={isBusy}
                                   onClick={() => setEditingParticipantId(null)}
-                                  className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-100"
+                                  className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white p-2 text-slate-500 hover:bg-slate-100 dark:border-white/10 dark:bg-white/5 dark:text-slate-300"
                                   aria-label="Cancelar edición"
                                 >
                                   <X className="h-4 w-4" />
@@ -2269,7 +2317,7 @@ export default function TournamentView({
                                   onClick={() =>
                                     handleClearParticipantAvatar(participant.id)
                                   }
-                                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                                  className="inline-flex min-h-[38px] items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 hover:bg-rose-100 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-300"
                                 >
                                   <Trash2 className="h-3.5 w-3.5" />
                                   <span>Quitar foto personalizada</span>
@@ -2296,7 +2344,7 @@ export default function TournamentView({
 
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-1.5">
-                                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white classic:text-[#1E4638]">
                                         {participant.name}
                                       </p>
                                       {linkedRoleMeta && linkedRole !== 'member' && (
@@ -2321,17 +2369,17 @@ export default function TournamentView({
 
                                     <div className="mt-0.5 flex items-center gap-1 text-[11px]">
                                       {isMine ? (
-                                        <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-300">
+                                        <span className="inline-flex items-center gap-1 font-bold text-emerald-700 dark:text-[#CCFF00] classic:text-[#D46F4D]">
                                           <UserCheck className="h-3 w-3" />
                                           <span>Tu perfil</span>
                                         </span>
                                       ) : isLinked ? (
-                                        <span className="inline-flex items-center gap-1 font-medium text-sky-700 dark:text-sky-300">
+                                        <span className="inline-flex items-center gap-1 font-semibold text-sky-700 dark:text-blue-400 classic:text-[#315E4E]">
                                           <UserCheck className="h-3 w-3" />
                                           <span>Cuenta vinculada</span>
                                         </span>
                                       ) : (
-                                        <span className="text-slate-400">
+                                        <span className="text-slate-400 dark:text-slate-500">
                                           Sin cuenta vinculada
                                         </span>
                                       )}
@@ -2348,7 +2396,7 @@ export default function TournamentView({
                                       onClick={() =>
                                         handleClaimParticipant(participant.id)
                                       }
-                                      className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60"
+                                      className="inline-flex min-h-[38px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 disabled:opacity-60 dark:border-[#CCFF00]/30 dark:bg-[#CCFF00]/12 dark:text-[#CCFF00] classic:border-[#1E4638] classic:bg-[#1E4638] classic:text-[#FBF5E8]"
                                     >
                                       {claimingId === participant.id ? (
                                         <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2369,7 +2417,7 @@ export default function TournamentView({
                                             participant.id
                                           )
                                         }
-                                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-emerald-600 disabled:opacity-50"
+                                        className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-emerald-600 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-[#CCFF00]"
                                         title="Subir foto del participante"
                                         aria-label={`Subir foto de ${participant.name}`}
                                       >
@@ -2382,7 +2430,7 @@ export default function TournamentView({
                                         onClick={() =>
                                           startEditingParticipant(participant)
                                         }
-                                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50"
+                                        className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white"
                                         title="Editar nombre"
                                         aria-label={`Editar a ${participant.name}`}
                                       >
@@ -2396,7 +2444,7 @@ export default function TournamentView({
                                           onClick={() =>
                                             handleUnlinkParticipant(participant.id)
                                           }
-                                          className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50"
+                                          className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-amber-50 hover:text-amber-700 disabled:opacity-50 dark:hover:bg-amber-500/15 dark:hover:text-amber-300"
                                           title="Desvincular cuenta"
                                           aria-label={`Desvincular cuenta de ${participant.name}`}
                                         >
@@ -2410,7 +2458,7 @@ export default function TournamentView({
                                         onClick={() =>
                                           handleDeleteParticipant(participant.id)
                                         }
-                                        className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50"
+                                        className="inline-flex min-h-[38px] min-w-[38px] items-center justify-center rounded-lg text-slate-400 transition hover:bg-rose-50 hover:text-rose-600 disabled:opacity-50 dark:hover:bg-rose-500/15 dark:hover:text-rose-400"
                                         title="Eliminar participante"
                                         aria-label={`Eliminar a ${participant.name}`}
                                       >
@@ -2422,7 +2470,7 @@ export default function TournamentView({
                               </div>
 
                               {canOwnerToggleRole && (
-                                <div className="flex items-center justify-end border-t border-slate-100 pt-2 dark:border-slate-800/80">
+                                <div className="flex items-center justify-end border-t border-slate-100 pt-2 dark:border-white/[0.06] classic:border-[#1E4638]/12">
                                   <button
                                     type="button"
                                     disabled={isBusy}
@@ -2432,7 +2480,7 @@ export default function TournamentView({
                                         linkedMember.role
                                       )
                                     }
-                                    className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50 ${
+                                    className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
                                       linkedMember.role === 'admin'
                                         ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100 dark:border-amber-500/35 dark:bg-amber-500/15 dark:text-amber-300'
                                         : 'border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300'
@@ -2463,8 +2511,8 @@ export default function TournamentView({
               )}
 
               {spectatorMembers.length > 0 && (
-                <div className="mt-5 border-t border-slate-200/80 pt-4 dark:border-slate-800">
-                  <h3 className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                <div className="mt-5 border-t border-slate-200/80 pt-4 dark:border-white/[0.08] classic:border-[#1E4638]/15">
+                  <h3 className="mb-2.5 flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#4C6B5E]">
                     <Eye className="h-3.5 w-3.5" />
                     <span>Espectadores / Otros miembros ({spectatorMembers.length})</span>
                   </h3>
@@ -2479,7 +2527,7 @@ export default function TournamentView({
                       return (
                         <li
                           key={m.id}
-                          className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/50"
+                          className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/70 px-3 py-2 dark:border-white/[0.06] dark:bg-white/[0.03] classic:border-[#1E4638]/15 classic:bg-[#EFE2CC]/60"
                         >
                           <div className="flex min-w-0 items-center gap-2">
                             <Avatar
@@ -2488,7 +2536,7 @@ export default function TournamentView({
                               size="sm"
                             />
                             <div className="min-w-0">
-                              <p className="truncate text-xs font-semibold text-slate-800 dark:text-slate-200">
+                              <p className="truncate text-xs font-bold text-slate-800 dark:text-slate-200 classic:text-[#1E4638]">
                                 {mName}
                               </p>
                               <span
@@ -2504,7 +2552,7 @@ export default function TournamentView({
                               type="button"
                               disabled={isRoleBusy}
                               onClick={() => handleToggleAdminRole(m.user_id, m.role)}
-                              className="inline-flex min-h-[44px] shrink-0 items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1.5 text-[11px] font-semibold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300"
+                              className="inline-flex min-h-[36px] shrink-0 items-center gap-1 rounded-xl border border-violet-200 bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 hover:bg-violet-100 disabled:opacity-50 dark:border-violet-500/35 dark:bg-violet-500/15 dark:text-violet-300"
                             >
                               {isRoleBusy && (
                                 <Loader2 className="h-3 w-3 animate-spin" />
@@ -2555,7 +2603,7 @@ export default function TournamentView({
         createPortal(
           <nav
             aria-label="Navegación del torneo"
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/85 bg-white/90 px-1.5 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.16)] backdrop-blur-xl md:hidden dark:border-slate-800/90 dark:bg-slate-950/90 dark:shadow-[0_-12px_36px_-10px_rgba(0,0,0,0.75)]"
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200/85 bg-white/92 px-1.5 pt-1.5 pb-[calc(env(safe-area-inset-bottom)+0.35rem)] shadow-[0_-8px_30px_-12px_rgba(15,23,42,0.16)] backdrop-blur-xl md:hidden dark:border-white/[0.08] dark:bg-[#141923]/95 dark:shadow-[0_-12px_36px_-10px_rgba(0,0,0,0.75)] classic:border-t-2 classic:border-[#143026] classic:bg-[#1E4638] classic:backdrop-blur-none"
           >
             <div className="mx-auto flex max-w-md items-center justify-around gap-0.5">
               {TABS.map((tab) => {
@@ -2569,28 +2617,28 @@ export default function TournamentView({
                       setActiveTab(tab.id);
                       window.scrollTo({ top: 0, behavior: 'smooth' });
                     }}
-                    className={`relative flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl px-0.5 py-1.5 transition-colors ${
+                    className={`relative flex min-h-[48px] flex-1 flex-col items-center justify-center gap-0.5 rounded-xl px-0.5 py-1.5 transition-colors ${
                       isActive
-                        ? 'text-emerald-600 dark:text-emerald-400'
-                        : 'text-slate-500 dark:text-slate-400'
+                        ? 'text-emerald-600 dark:text-[#CCFF00] classic:text-[#FBF5E8]'
+                        : 'text-slate-500 dark:text-slate-400 classic:text-[#B9CFC5]'
                     }`}
                   >
                     {isActive && (
                       <motion.div
                         layoutId="mobile-bottom-tab-pill"
                         transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                        className="absolute inset-0.5 rounded-2xl bg-emerald-500/12 dark:bg-emerald-400/15"
+                        className="absolute inset-0.5 rounded-xl bg-emerald-500/12 dark:bg-[#CCFF00]/15 classic:border classic:border-[#D9A441] classic:bg-[#285947]"
                       />
                     )}
                     <div className="relative z-10">
                       <Icon className="h-4 w-4" />
                       {tab.id === 'predictions' && openPollsCount > 0 && (
-                        <span className="absolute -top-1 -right-2 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-emerald-500 px-0.5 text-[8px] font-black text-white">
+                        <span className="absolute -top-1 -right-2 inline-flex h-3.5 min-w-[14px] items-center justify-center rounded-full bg-emerald-500 px-0.5 font-mono text-[8px] font-black text-white tabular-nums dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:bg-[#D46F4D] classic:text-[#FBF5E8]">
                           {openPollsCount}
                         </span>
                       )}
                     </div>
-                    <span className="relative z-10 text-[9.5px] font-bold tracking-tight">
+                    <span className="relative z-10 text-[9.5px] font-extrabold tracking-tight uppercase">
                       {tab.shortLabel}
                     </span>
                   </button>
