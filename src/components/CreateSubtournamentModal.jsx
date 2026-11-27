@@ -10,6 +10,7 @@ import {
   Plus,
   Shuffle,
   Square,
+  Tag,
   Trophy,
   User,
   Users,
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import {
+  SUBTOURNAMENT_CATEGORY_PRESETS,
   SUBTOURNAMENT_FORMAT_LIST,
   buildDefaultPointsScale,
   generateSubtournamentMatches,
@@ -34,12 +36,14 @@ export default function CreateSubtournamentModal({
   participants,
   potSets = [],
   potAssignments = [],
+  existingCategories = [],
   disableEscape = false,
   onOpenPotManager,
   onClose,
   onCreated,
 }) {
   const [name, setName] = useState('');
+  const [category, setCategory] = useState('');
   const [format, setFormat] = useState('league');
   const [homeAndAway, setHomeAndAway] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
@@ -58,11 +62,17 @@ export default function CreateSubtournamentModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  const suggestedCategories = useMemo(() => {
+    const set = new Set([...existingCategories, ...SUBTOURNAMENT_CATEGORY_PRESETS]);
+    return Array.from(set).filter(Boolean);
+  }, [existingCategories]);
+
   useEffect(() => {
     if (!isOpen) return;
 
     const allIds = participants.map((p) => p.id);
     setName('');
+    setCategory('');
     setFormat('league');
     setHomeAndAway(false);
     setThirdPlace(false);
@@ -317,8 +327,11 @@ export default function CreateSubtournamentModal({
       parsedScale.push(numVal);
     }
 
+    const cleanCategory = category.trim() || null;
+
     const config = {
       is_team_based: isTeamBased,
+      ...(cleanCategory ? { category: cleanCategory } : {}),
     };
     if (format === 'league') {
       config.home_and_away = homeAndAway;
@@ -337,6 +350,7 @@ export default function CreateSubtournamentModal({
           tournament_id: tournamentId,
           matchday_id: matchday.id,
           name: cleanName,
+          category: cleanCategory,
           format,
           config,
           points_scale: parsedScale,
@@ -450,7 +464,6 @@ export default function CreateSubtournamentModal({
             transition={{ type: 'spring', stiffness: 400, damping: 34 }}
             className="flex h-[90dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-3xl border border-slate-200/90 bg-white shadow-2xl sm:h-auto sm:max-h-[88dvh] sm:rounded-2xl dark:border-slate-800 dark:bg-slate-900"
           >
-            {/* Header fijo */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3.5 sm:px-6 sm:py-4 dark:border-slate-800">
               <div className="flex min-w-0 items-center gap-2.5">
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300">
@@ -461,7 +474,7 @@ export default function CreateSubtournamentModal({
                     Crear Subtorneo — {matchday.name}
                   </h2>
                   <p className="truncate text-xs text-slate-500 dark:text-slate-400">
-                    Define formato, competidores o equipos y puntos.
+                    Define nombre, categoría, formato, competidores y puntos.
                   </p>
                 </div>
               </div>
@@ -470,14 +483,13 @@ export default function CreateSubtournamentModal({
                 type="button"
                 disabled={submitting}
                 onClick={onClose}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-600 dark:active:bg-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+                className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-xl text-slate-400 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-600 dark:active:bg-slate-800 dark:hover:bg-slate-800 dark:hover:text-slate-200"
                 aria-label="Cerrar modal"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Formulario con scroll único */}
             <form
               id="create-subtournament-form"
               onSubmit={handleSubmit}
@@ -490,7 +502,7 @@ export default function CreateSubtournamentModal({
                 </div>
               )}
 
-              {/* 1. Nombre y Formato */}
+              {/* 1. Nombre, Categoría y Formato */}
               <div className="space-y-4">
                 <div>
                   <label
@@ -509,6 +521,49 @@ export default function CreateSubtournamentModal({
                     placeholder="Ej: Fútbol 5, FIFA 1v1, Truco por parejas..."
                     className="min-h-[46px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-white dark:placeholder:text-slate-500"
                   />
+                </div>
+
+                {/* Categoría para agrupar estadísticas */}
+                <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/45">
+                  <label
+                    htmlFor="subtournament-category"
+                    className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300"
+                  >
+                    <Tag className="h-3.5 w-3.5 text-indigo-500" />
+                    <span>Categoría (para estadísticas agrupadas)</span>
+                  </label>
+                  <input
+                    id="subtournament-category"
+                    type="text"
+                    maxLength={40}
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    placeholder="Ej: FIFA, Truco, Pádel... (opcional)"
+                    className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-base font-medium text-slate-900 placeholder:text-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                  />
+
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {suggestedCategories.map((cat) => {
+                      const active =
+                        category.trim().toLowerCase() === cat.toLowerCase();
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() =>
+                            setCategory(active ? '' : cat)
+                          }
+                          className={`min-h-[36px] rounded-xl border px-2.5 py-1 text-xs font-bold transition ${
+                            active
+                              ? 'border-indigo-500 bg-indigo-600 text-white shadow-2xs'
+                              : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 <div>
@@ -596,14 +651,14 @@ export default function CreateSubtournamentModal({
                     <button
                       type="button"
                       onClick={selectAllParticipants}
-                      className="min-h-[38px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 active:bg-slate-100 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 active:bg-slate-100 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       Todos
                     </button>
                     <button
                       type="button"
                       onClick={clearAllParticipants}
-                      className="min-h-[38px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 active:bg-slate-100 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                      className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 active:bg-slate-100 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                     >
                       Ninguno
                     </button>
@@ -694,7 +749,7 @@ export default function CreateSubtournamentModal({
                               handleTeamCountChange(teams.length - 1)
                             }
                             disabled={teams.length <= 2}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                             aria-label="Restar equipo"
                           >
                             <Minus className="h-4 w-4" />
@@ -709,7 +764,7 @@ export default function CreateSubtournamentModal({
                             onChange={(e) =>
                               handleTeamCountChange(e.target.value)
                             }
-                            className="h-10 w-16 rounded-xl border border-slate-200 bg-white px-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                            className="h-11 w-16 rounded-xl border border-slate-200 bg-white px-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
                           />
                           <button
                             type="button"
@@ -717,7 +772,7 @@ export default function CreateSubtournamentModal({
                               handleTeamCountChange(teams.length + 1)
                             }
                             disabled={teams.length >= 20}
-                            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
+                            className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 active:bg-slate-100 disabled:opacity-40 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
                             aria-label="Sumar equipo"
                           >
                             <Plus className="h-4 w-4" />
@@ -729,14 +784,13 @@ export default function CreateSubtournamentModal({
                         type="button"
                         onClick={handleRandomizeTeams}
                         disabled={selectedParticipantIds.length < 2}
-                        className="inline-flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs transition active:bg-slate-100 hover:bg-slate-100 disabled:opacity-50 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 shadow-2xs transition active:bg-slate-100 hover:bg-slate-100 disabled:opacity-50 sm:w-auto dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
                       >
                         <Shuffle className="h-3.5 w-3.5 text-indigo-600 dark:text-indigo-400" />
                         <span>Armar equipos al azar</span>
                       </button>
                     </div>
 
-                    {/* Armado equilibrado con Bombos guardados */}
                     <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <span className="flex items-center gap-1.5 text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -748,7 +802,7 @@ export default function CreateSubtournamentModal({
                           <button
                             type="button"
                             onClick={onOpenPotManager}
-                            className="min-h-[32px] px-1 text-xs font-bold text-amber-800 underline underline-offset-2 hover:text-amber-950 dark:text-amber-300 dark:hover:text-amber-100"
+                            className="min-h-[36px] px-1 text-xs font-bold text-amber-800 underline underline-offset-2 hover:text-amber-950 dark:text-amber-300 dark:hover:text-amber-100"
                           >
                             {potSets.length > 0
                               ? 'Gestionar bombos'
@@ -770,7 +824,7 @@ export default function CreateSubtournamentModal({
                               setSelectedPotSetId(e.target.value);
                               setPotBalanceNotice('');
                             }}
-                            className="min-h-[42px] w-full flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-base font-bold text-slate-800 focus:border-amber-500 focus:outline-none sm:text-xs dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
+                            className="min-h-[44px] w-full flex-1 rounded-xl border border-amber-200 bg-white px-3 py-2 text-base font-bold text-slate-800 focus:border-amber-500 focus:outline-none sm:text-xs dark:border-amber-500/30 dark:bg-slate-900 dark:text-white"
                           >
                             {potSets.map((ps) => (
                               <option key={ps.id} value={ps.id}>
@@ -786,7 +840,7 @@ export default function CreateSubtournamentModal({
                               !activePotSet ||
                               selectedParticipantIds.length < 2
                             }
-                            className="inline-flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition active:bg-amber-700 hover:bg-amber-700 disabled:opacity-50 sm:w-auto"
+                            className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-2 text-xs font-bold text-white shadow-2xs transition active:bg-amber-700 hover:bg-amber-700 disabled:opacity-50 sm:w-auto"
                           >
                             <Layers className="h-3.5 w-3.5" />
                             <span>Armar equilibrados</span>
@@ -801,7 +855,6 @@ export default function CreateSubtournamentModal({
                       )}
                     </div>
 
-                    {/* Nombres de equipos */}
                     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                       {teams.map((team, idx) => {
                         const countInTeam = selectedParticipantIds.filter(
@@ -839,7 +892,6 @@ export default function CreateSubtournamentModal({
                       })}
                     </div>
 
-                    {/* Asignación de jugadores */}
                     <div>
                       <p className="mb-2 text-xs font-bold text-slate-600 dark:text-slate-300">
                         Asigna cada jugador seleccionado a su equipo:
@@ -890,7 +942,7 @@ export default function CreateSubtournamentModal({
                                               [pId]: team.id,
                                             }))
                                           }
-                                          className={`min-h-[38px] truncate rounded-xl border px-3 py-1.5 text-xs font-bold transition active:scale-[0.98] ${
+                                          className={`min-h-[44px] truncate rounded-xl border px-3 py-1.5 text-xs font-bold transition active:scale-[0.98] ${
                                             active
                                               ? 'border-emerald-600 bg-emerald-600 text-white shadow-2xs'
                                               : 'border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
@@ -910,7 +962,7 @@ export default function CreateSubtournamentModal({
                                         [pId]: e.target.value,
                                       }))
                                     }
-                                    className="min-h-[42px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none sm:w-auto sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                                    className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-base font-semibold text-slate-800 focus:border-emerald-500 focus:outline-none sm:w-auto sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                                   >
                                     <option value="">Sin asignar</option>
                                     {teams.map((team) => (
@@ -973,7 +1025,7 @@ export default function CreateSubtournamentModal({
                             onChange={(e) =>
                               handlePointInputChange(index, e.target.value)
                             }
-                            className="min-h-[40px] w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-white"
+                            className="min-h-[44px] w-full rounded-lg border border-slate-200 bg-slate-50 px-2 py-1.5 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:bg-white focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-950/70 dark:text-white"
                           />
                         </div>
                       ))}
@@ -989,7 +1041,6 @@ export default function CreateSubtournamentModal({
               </div>
             </form>
 
-            {/* Footer fijo siempre visible sobre el teclado */}
             <div className="flex shrink-0 items-center justify-end gap-2.5 border-t border-slate-200/80 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:gap-3 sm:px-6 sm:py-4 dark:border-slate-800 dark:bg-slate-900">
               <button
                 type="button"

@@ -1096,3 +1096,84 @@ export function computeCustomPairStats(
     directMatches,
   };
 }
+export function computeCustomCategoryStats(
+  participants,
+  matchdays,
+  subtournaments,
+  subEntries,
+  subEntryMembers,
+  subMatches,
+  subEliminations
+) {
+  const categoriesMap = new Map();
+
+  (subtournaments || []).forEach((sub) => {
+    const rawCat = String(sub.category ?? sub.config?.category ?? '').trim();
+    const label = rawCat || 'Sin categoría';
+    const key = label.toLowerCase();
+
+    if (!categoriesMap.has(key)) {
+      categoriesMap.set(key, {
+        key,
+        name: label,
+        hasExplicitCategory: Boolean(rawCat),
+        subtournaments: [],
+      });
+    }
+    categoriesMap.get(key).subtournaments.push(sub);
+  });
+
+  const results = [];
+
+  categoriesMap.forEach((bucket) => {
+    const subIds = new Set(bucket.subtournaments.map((s) => s.id));
+    const catEntries = (subEntries || []).filter((e) =>
+      subIds.has(e.subtournament_id)
+    );
+    const catEntryIds = new Set(catEntries.map((e) => e.id));
+    const catEntryMembers = (subEntryMembers || []).filter((em) =>
+      catEntryIds.has(em.entry_id)
+    );
+    const catMatches = (subMatches || []).filter((m) =>
+      subIds.has(m.subtournament_id)
+    );
+    const catElims = (subEliminations || []).filter((el) =>
+      subIds.has(el.subtournament_id)
+    );
+
+    const catStats = computeCustomStats(
+      participants,
+      matchdays,
+      bucket.subtournaments,
+      catEntries,
+      catEntryMembers,
+      catMatches,
+      catElims
+    );
+
+    const leader =
+      catStats.orderedPlayerStats.find((s) => s.totalPoints > 0) ||
+      catStats.orderedPlayerStats[0] ||
+      null;
+
+    results.push({
+      key: bucket.key,
+      name: bucket.name,
+      hasExplicitCategory: bucket.hasExplicitCategory,
+      leader,
+      ...catStats,
+    });
+  });
+
+  results.sort((a, b) => {
+    if (a.hasExplicitCategory !== b.hasExplicitCategory) {
+      return a.hasExplicitCategory ? -1 : 1;
+    }
+    if (b.totalSubtournaments !== a.totalSubtournaments) {
+      return b.totalSubtournaments - a.totalSubtournaments;
+    }
+    return a.name.localeCompare(b.name, 'es');
+  });
+
+  return results;
+}

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import {
   ArrowLeft,
   Award,
+  Check,
   CheckCircle2,
   ListOrdered,
   Loader2,
@@ -9,17 +10,21 @@ import {
   Pencil,
   Swords,
   Table2,
+  Tag,
   Trash2,
   Users,
+  X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
+  SUBTOURNAMENT_CATEGORY_PRESETS,
   adaptEntriesToParticipants,
   adaptSubEliminationsToEliminations,
   adaptSubMatchesToMatches,
   generateSubtournamentMatches,
   getPointsForRank,
+  getSubtournamentCategory,
   getSubtournamentFormatMeta,
 } from '../utils/customTournamentEngine';
 import { getKnockoutSeriesStatus } from '../utils/tournamentEngine';
@@ -40,6 +45,7 @@ export default function SubtournamentDetailView({
   subMatches,
   subEliminations,
   participantMap,
+  existingCategories = [],
   isAdmin,
   currentUserId,
   onBack,
@@ -55,6 +61,12 @@ export default function SubtournamentDetailView({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [actionError, setActionError] = useState('');
+
+  const [isEditingCategory, setIsEditingCategory] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState(
+    getSubtournamentCategory(subtournament) || ''
+  );
+  const [savingCategory, setSavingCategory] = useState(false);
 
   const [manualRanks, setManualRanks] = useState(() => {
     const initial = {};
@@ -76,9 +88,18 @@ export default function SubtournamentDetailView({
   const canEdit = isAdmin && !isCompleted;
   const isTeamBased = Boolean(subtournament.config?.is_team_based);
   const formatMeta = getSubtournamentFormatMeta(subtournament.format);
+  const currentCategory = getSubtournamentCategory(subtournament);
   const pointsScale = Array.isArray(subtournament.points_scale)
     ? subtournament.points_scale
     : [];
+
+  const suggestedCategories = useMemo(() => {
+    const set = new Set([
+      ...existingCategories,
+      ...SUBTOURNAMENT_CATEGORY_PRESETS,
+    ]);
+    return Array.from(set).filter(Boolean);
+  }, [existingCategories]);
 
   const adaptedEntries = useMemo(() => {
     const base = adaptEntriesToParticipants(
@@ -138,6 +159,33 @@ export default function SubtournamentDetailView({
     });
     return map;
   }, [entryMembers, participantMap]);
+
+  async function handleSaveCategory(e) {
+    e?.preventDefault?.();
+    if (!isAdmin) return;
+    setSavingCategory(true);
+    setActionError('');
+
+    const cleanCat = categoryDraft.trim() || null;
+    try {
+      const nextConfig = { ...(subtournament.config || {}) };
+      if (cleanCat) nextConfig.category = cleanCat;
+      else delete nextConfig.category;
+
+      const { error: updErr } = await supabase
+        .from('subtournaments')
+        .update({ category: cleanCat, config: nextConfig })
+        .eq('id', subtournament.id);
+
+      if (updErr) throw updErr;
+      setIsEditingCategory(false);
+      await onRefreshData();
+    } catch (err) {
+      setActionError(err?.message || 'No se pudo actualizar la categoría.');
+    } finally {
+      setSavingCategory(false);
+    }
+  }
 
   async function syncSubKnockoutProgression(latestRows) {
     if (subtournament.format !== 'knockout') return;
@@ -609,16 +657,22 @@ export default function SubtournamentDetailView({
         </div>
       )}
 
-      {/* Tarjeta resumen del Subtorneo */}
+      {/* Tarjeta resumen del Subtorneo + Categoría */}
       <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-800 dark:bg-slate-900/55">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="flex-1">
             <div className="mb-1.5 flex flex-wrap items-center gap-2">
               <span
                 className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-semibold ${formatMeta.badgeClass}`}
               >
                 {formatMeta.label}
               </span>
+              {currentCategory && (
+                <span className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-0.5 text-[11px] font-bold text-indigo-700 dark:border-indigo-500/35 dark:bg-indigo-500/15 dark:text-indigo-300">
+                  <Tag className="h-3 w-3" />
+                  <span>{currentCategory}</span>
+                </span>
+              )}
               <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-0.5 text-[11px] font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                 <Users className="h-3 w-3 text-slate-400" />
                 <span>
@@ -644,9 +698,81 @@ export default function SubtournamentDetailView({
                 )}
               </span>
             </div>
-            <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
-              {subtournament.name}
-            </h2>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl font-extrabold text-slate-900 dark:text-white">
+                {subtournament.name}
+              </h2>
+
+              {isAdmin && !isEditingCategory && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCategoryDraft(currentCategory || '');
+                    setIsEditingCategory(true);
+                  }}
+                  className="inline-flex min-h-[36px] items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  <Tag className="h-3 w-3" />
+                  <span>{currentCategory ? 'Cambiar categoría' : '+ Categoría'}</span>
+                </button>
+              )}
+            </div>
+
+            {isAdmin && isEditingCategory && (
+              <form
+                onSubmit={handleSaveCategory}
+                className="mt-3 space-y-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900"
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    maxLength={40}
+                    value={categoryDraft}
+                    onChange={(e) => setCategoryDraft(e.target.value)}
+                    placeholder="Ej: FIFA, Truco, Pádel..."
+                    className="min-h-[44px] flex-1 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-base font-medium text-slate-900 focus:border-indigo-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                  />
+                  <button
+                    type="submit"
+                    disabled={savingCategory}
+                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl bg-indigo-600 px-3.5 py-1.5 text-xs font-bold text-white hover:bg-indigo-700 disabled:opacity-60"
+                  >
+                    {savingCategory ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    <span>Guardar</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingCategory(false)}
+                    className="inline-flex min-h-[44px] min-w-[44px] items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800"
+                    aria-label="Cancelar edición de categoría"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestedCategories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setCategoryDraft(cat)}
+                      className={`min-h-[34px] rounded-lg border px-2 py-1 text-[11px] font-bold ${
+                        categoryDraft.trim().toLowerCase() === cat.toLowerCase()
+                          ? 'border-indigo-500 bg-indigo-600 text-white'
+                          : 'border-slate-200 bg-slate-50 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </form>
+            )}
           </div>
 
           {pointsScale.length > 0 && (
@@ -694,7 +820,6 @@ export default function SubtournamentDetailView({
         )}
       </div>
 
-      {/* Resultado oficial si ya está finalizado */}
       {isCompleted && (
         <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 dark:border-emerald-500/35 dark:bg-emerald-500/10">
           <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-900 dark:text-emerald-300">
@@ -740,7 +865,6 @@ export default function SubtournamentDetailView({
         </div>
       )}
 
-      {/* Contenido interno del Subtorneo */}
       {subtournament.format === 'manual' ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">

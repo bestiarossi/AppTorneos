@@ -8,6 +8,23 @@ import {
 
 export const DEFAULT_POINTS_TEMPLATE = [10, 7, 5, 4, 3, 2, 1];
 
+export const SUBTOURNAMENT_CATEGORY_PRESETS = [
+  'Fútbol / FIFA',
+  'Pádel / Tenis',
+  'Truco / Cartas',
+  'Ping Pong',
+  'Pool / Metegol',
+  'Básquet',
+  'Carreras',
+  'Gaming',
+];
+
+export function getSubtournamentCategory(subtournament) {
+  const raw = subtournament?.category ?? subtournament?.config?.category ?? '';
+  const clean = String(raw || '').trim();
+  return clean || null;
+}
+
 export const SUBTOURNAMENT_FORMATS = {
   league: {
     value: 'league',
@@ -52,10 +69,16 @@ export function buildDefaultPointsScale(count, existingScale = []) {
   const safeCount = Math.max(0, Number(count) || 0);
   const scale = [];
   for (let i = 0; i < safeCount; i += 1) {
-    if (i < existingScale.length && existingScale[i] !== undefined && existingScale[i] !== null) {
+    if (
+      i < existingScale.length &&
+      existingScale[i] !== undefined &&
+      existingScale[i] !== null
+    ) {
       scale.push(existingScale[i]);
     } else {
-      scale.push(i < DEFAULT_POINTS_TEMPLATE.length ? DEFAULT_POINTS_TEMPLATE[i] : 0);
+      scale.push(
+        i < DEFAULT_POINTS_TEMPLATE.length ? DEFAULT_POINTS_TEMPLATE[i] : 0
+      );
     }
   }
   return scale;
@@ -63,7 +86,11 @@ export function buildDefaultPointsScale(count, existingScale = []) {
 
 export function getPointsForRank(pointsScale, rank) {
   const numericRank = Number(rank);
-  if (!Array.isArray(pointsScale) || Number.isNaN(numericRank) || numericRank < 1) {
+  if (
+    !Array.isArray(pointsScale) ||
+    Number.isNaN(numericRank) ||
+    numericRank < 1
+  ) {
     return 0;
   }
   const index = numericRank - 1;
@@ -72,7 +99,12 @@ export function getPointsForRank(pointsScale, rank) {
   return Number.isNaN(val) ? 0 : val;
 }
 
-export function adaptEntriesToParticipants(entries, entryMembers, currentUserId, participantMap) {
+export function adaptEntriesToParticipants(
+  entries,
+  entryMembers,
+  currentUserId,
+  participantMap
+) {
   const membersByEntry = new Map();
   (entryMembers || []).forEach((em) => {
     if (!membersByEntry.has(em.entry_id)) {
@@ -239,7 +271,6 @@ export function computeSuggestedSubtournamentRanks(
     }));
   }
 
-  // Formato 'manual'
   const sorted = [...adaptedEntries]
     .map((entry, idx) => {
       const assignedRank = Number.parseInt(

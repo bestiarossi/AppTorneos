@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Star,
   Swords,
+  Tag,
   TrendingUp,
   Trophy,
   Users,
@@ -20,6 +21,7 @@ import {
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import { getSubtournamentFormatMeta } from '../utils/customTournamentEngine';
 import {
+  computeCustomCategoryStats,
   computeCustomPairStats,
   computeCustomStats,
   computeLastStandingStats,
@@ -856,6 +858,8 @@ function CustomStatsView({
   onSelectH2HA,
   onSelectH2HB,
 }) {
+  const [selectedCategoryKey, setSelectedCategoryKey] = useState('all');
+
   const stats = useMemo(
     () =>
       computeCustomStats(
@@ -876,6 +880,36 @@ function CustomStatsView({
       subMatches,
       subEliminations,
     ]
+  );
+
+  const categoryBuckets = useMemo(
+    () =>
+      computeCustomCategoryStats(
+        participants,
+        matchdays,
+        subtournaments,
+        subEntries,
+        subEntryMembers,
+        subMatches,
+        subEliminations
+      ),
+    [
+      participants,
+      matchdays,
+      subtournaments,
+      subEntries,
+      subEntryMembers,
+      subMatches,
+      subEliminations,
+    ]
+  );
+
+  const activeCategoryBucket = useMemo(
+    () =>
+      selectedCategoryKey === 'all'
+        ? null
+        : categoryBuckets.find((b) => b.key === selectedCategoryKey) || null,
+    [categoryBuckets, selectedCategoryKey]
   );
 
   const selectedStats =
@@ -910,6 +944,8 @@ function CustomStatsView({
     stats.orderedPlayerStats[0]?.totalPoints || 1
   );
 
+  const explicitCategories = categoryBuckets.filter((b) => b.hasExplicitCategory);
+
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -942,6 +978,158 @@ function CustomStatsView({
           subtext={`${stats.totalInternalEliminations} bajas en Último en pie`}
         />
       </div>
+
+      {/* Sección: Estadísticas y Reyes por Categoría */}
+      {categoryBuckets.length > 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 dark:border-slate-800 dark:bg-slate-900/70">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                <Tag className="h-4 w-4 text-indigo-500" />
+                <span>Estadísticas por Categoría</span>
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                {explicitCategories.length > 0
+                  ? 'Compará quién domina cada disciplina o categoría del torneo.'
+                  : 'Asigná una categoría al crear o editar subtorneos para ver rankings separados.'}
+              </p>
+            </div>
+          </div>
+
+          {/* Tarjetas Reyes por Categoría */}
+          <div className="mb-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+            {categoryBuckets.map((cat) => (
+              <button
+                key={cat.key}
+                type="button"
+                onClick={() =>
+                  setSelectedCategoryKey(
+                    selectedCategoryKey === cat.key ? 'all' : cat.key
+                  )
+                }
+                className={`flex min-h-[44px] items-center justify-between gap-3 rounded-2xl border p-3.5 text-left transition ${
+                  selectedCategoryKey === cat.key
+                    ? 'border-indigo-500 bg-indigo-50/70 ring-2 ring-indigo-500/20 dark:border-indigo-400 dark:bg-indigo-500/15'
+                    : 'border-slate-200/80 bg-slate-50/70 hover:border-indigo-300 dark:border-slate-800 dark:bg-slate-950/45'
+                }`}
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  {cat.leader ? (
+                    <Avatar
+                      name={cat.leader.participant.name}
+                      url={resolveParticipantAvatar(cat.leader.participant)}
+                      size="sm"
+                      highlight={cat.leader.totalPoints > 0}
+                    />
+                  ) : (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                      <Tag className="h-4 w-4" />
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-extrabold uppercase tracking-wider text-indigo-700 dark:text-indigo-300">
+                      {cat.name}
+                    </p>
+                    <p className="truncate text-sm font-black text-slate-900 dark:text-white">
+                      {cat.leader && cat.leader.totalPoints > 0
+                        ? `👑 ${cat.leader.participant.name}`
+                        : `${cat.totalSubtournaments} ${
+                            cat.totalSubtournaments === 1 ? 'subtorneo' : 'subtorneos'
+                          }`}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="shrink-0 text-right tabular-nums">
+                  {cat.leader && cat.leader.totalPoints > 0 && (
+                    <p className="text-sm font-black text-emerald-700 dark:text-emerald-400">
+                      {cat.leader.totalPoints} pts
+                    </p>
+                  )}
+                  <p className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    {cat.completedSubtournamentsCount}/{cat.totalSubtournaments} fin.
+                  </p>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Tabla detallada de la categoría seleccionada */}
+          {activeCategoryBucket && (
+            <div className="rounded-2xl border border-indigo-200/80 bg-indigo-50/35 p-3.5 dark:border-indigo-500/30 dark:bg-indigo-500/8">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs font-extrabold text-indigo-900 dark:text-indigo-200">
+                  Tabla de "{activeCategoryBucket.name}" ({activeCategoryBucket.totalSubtournaments}{' '}
+                  {activeCategoryBucket.totalSubtournaments === 1 ? 'subtorneo' : 'subtorneos'})
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setSelectedCategoryKey('all')}
+                  className="min-h-[34px] rounded-lg bg-white px-2.5 py-1 text-[11px] font-bold text-slate-600 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300"
+                >
+                  Ver todas
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-left text-xs tabular-nums">
+                  <thead>
+                    <tr className="border-b border-indigo-200/70 text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      <th className="w-8 py-2 text-center">#</th>
+                      <th className="px-2 py-2">Jugador</th>
+                      <th className="px-2 py-2 text-center">Jug.</th>
+                      <th className="px-2 py-2 text-center">1.º</th>
+                      <th className="px-2 py-2 text-center">Podios</th>
+                      <th className="px-2 py-2 text-center">Cruces</th>
+                      <th className="px-2 py-2 text-right">Pts</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-indigo-100/70 dark:divide-slate-800">
+                    {activeCategoryBucket.orderedPlayerStats
+                      .filter((st) => st.totalSubtournamentsJoined > 0)
+                      .map((st, idx) => (
+                        <tr key={st.participant.id}>
+                          <td className="py-2 text-center font-bold text-slate-500">
+                            {idx + 1}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-2">
+                              <Avatar
+                                name={st.participant.name}
+                                url={resolveParticipantAvatar(st.participant)}
+                                size="xs"
+                              />
+                              <span className="font-bold text-slate-900 dark:text-slate-100">
+                                {st.participant.name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-2 py-2 text-center font-semibold text-slate-600 dark:text-slate-300">
+                            {st.completedSubtournamentsPlayed}
+                          </td>
+                          <td className="px-2 py-2 text-center font-bold text-amber-700 dark:text-amber-300">
+                            {st.firstPlaces}
+                          </td>
+                          <td className="px-2 py-2 text-center text-slate-600 dark:text-slate-300">
+                            {st.podiums}
+                          </td>
+                          <td className="px-2 py-2 text-center text-slate-500 dark:text-slate-400">
+                            {st.internalMatchesPlayed > 0
+                              ? `${st.internalWins}G-${st.internalDraws}E-${st.internalLosses}P`
+                              : '—'}
+                          </td>
+                          <td className="px-2 py-2 text-right font-black text-emerald-700 dark:text-emerald-400">
+                            {st.totalPoints}
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {stats.completedSubtournamentsCount > 0 ||
       stats.totalInternalMatchesPlayed > 0 ? (
