@@ -32,7 +32,10 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { resolveParticipantAvatar, uploadParticipantAvatar } from '../utils/avatarUpload';
+import {
+  resolveParticipantAvatar,
+  uploadParticipantAvatar,
+} from '../utils/avatarUpload';
 import { computeTournamentBadges } from '../utils/badgesEngine';
 import { triggerChampionConfetti } from '../utils/confetti';
 import { computeCustomGeneralStandings } from '../utils/customTournamentEngine';
@@ -109,6 +112,7 @@ export default function TournamentView({
   onBack,
 }) {
   const toast = useToast();
+
   const [tournament, setTournament] = useState(null);
   const [membership, setMembership] = useState(null);
   const [members, setMembers] = useState([]);
@@ -116,12 +120,10 @@ export default function TournamentView({
   const [matches, setMatches] = useState([]);
   const [eliminations, setEliminations] = useState([]);
 
-  // Estado compartido de Prode en tiempo real
   const [prodePolls, setProdePolls] = useState([]);
   const [prodeVotes, setProdeVotes] = useState([]);
   const [prodeLoading, setProdeLoading] = useState(true);
 
-  // Estado específico de formato 'custom'
   const [customMatchdays, setCustomMatchdays] = useState([]);
   const [subtournaments, setSubtournaments] = useState([]);
   const [subEntries, setSubEntries] = useState([]);
@@ -585,7 +587,6 @@ export default function TournamentView({
     return members.filter((m) => !linkedUserIds.has(m.user_id));
   }, [members, participants]);
 
-  // Insignias en vivo para cada participante
   const badgesMap = useMemo(
     () =>
       computeTournamentBadges({
@@ -616,7 +617,6 @@ export default function TournamentView({
     ]
   );
 
-  // Detección de Campeón definitivo para Banner + Confetti dorado
   const crownedChampion = useMemo(() => {
     if (!tournament || enrichedParticipants.length === 0) return null;
 
@@ -1769,7 +1769,6 @@ export default function TournamentView({
                       </div>
                     )}
 
-                    {/* Banner de Campeón Coronado */}
                     {crownedChampion && (
                       <div className="podium-gold mt-3.5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-3.5 py-2.5">
                         <div className="flex items-center gap-2.5">
@@ -1805,7 +1804,6 @@ export default function TournamentView({
               </AnimatePresence>
             </div>
 
-            {/* Invitación */}
             <div className="flex shrink-0 flex-col gap-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3.5 backdrop-blur-sm sm:min-w-[270px] dark:border-slate-700/80 dark:bg-slate-900/75">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
@@ -1882,7 +1880,6 @@ export default function TournamentView({
           </div>
         </motion.section>
 
-        {/* Cuerpo principal: Pestañas + Participantes */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
           <motion.section
             initial={{ opacity: 0, y: 14 }}
@@ -1891,7 +1888,6 @@ export default function TournamentView({
             className="lg:col-span-8"
           >
             <div className="glass-card overflow-hidden rounded-3xl">
-              {/* Header de pestañas en Desktop */}
               <div className="relative hidden overflow-x-auto border-b border-slate-200/80 px-2 pt-2 md:flex dark:border-slate-800">
                 {TABS.map((tab) => {
                   const Icon = tab.icon;
@@ -1927,7 +1923,6 @@ export default function TournamentView({
                 })}
               </div>
 
-              {/* Indicador compacto en Móvil */}
               <div className="flex items-center justify-between border-b border-slate-200/80 px-4 py-3 md:hidden dark:border-slate-800">
                 <div className="flex items-center gap-2">
                   <ActiveTabIcon className="h-4 w-4 text-emerald-500" />
@@ -2042,37 +2037,20 @@ export default function TournamentView({
                       />
                     )}
 
-                 {activeTab === 'summary' && (
-                    <TournamentSummaryTab
-                      tournament={tournament}
-                      participants={enrichedParticipants}
-                      matches={matches}
-                      eliminations={eliminations}
-                      customMatchdays={customMatchdays}
-                      subtournaments={subtournaments}
-                      subEntries={subEntries}
-                      subEntryMembers={subEntryMembers}
-                      subMatches={subMatches}
-                      currentUserId={user.id}
-                      prodeLeader={
-                        prodePolls.length > 0 && prodeVotes.length > 0
-                          ? computeTournamentBadges({
-                              tournament,
-                              participants: enrichedParticipants,
-                              matches,
-                              eliminations,
-                              customMatchdays,
-                              subtournaments,
-                              subEntries,
-                              subEntryMembers,
-                              subMatches,
-                              prodePolls,
-                              prodeVotes,
-                            }) && null // o dejar que TournamentSummaryTab calcule
-                          : null
-                      }
-                    />
-                  )}
+                    {activeTab === 'summary' && (
+                      <TournamentSummaryTab
+                        tournament={tournament}
+                        participants={enrichedParticipants}
+                        matches={matches}
+                        eliminations={eliminations}
+                        customMatchdays={customMatchdays}
+                        subtournaments={subtournaments}
+                        subEntries={subEntries}
+                        subEntryMembers={subEntryMembers}
+                        subMatches={subMatches}
+                        currentUserId={user.id}
+                      />
+                    )}
 
                     {activeTab === 'stats' && (
                       <TournamentStatsTab
@@ -2095,7 +2073,6 @@ export default function TournamentView({
             </div>
           </motion.section>
 
-          {/* Lista de Participantes, Roles e Insignias */}
           <motion.aside
             initial={{ opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
@@ -2394,7 +2371,7 @@ export default function TournamentView({
                                         title="Editar nombre"
                                         aria-label={`Editar a ${participant.name}`}
                                       >
-                                        <Pencil className="h-4 w-4" /> 
+                                        <Pencil className="h-4 w-4" />
                                       </button>
 
                                       {isLinked && (
@@ -2559,7 +2536,6 @@ export default function TournamentView({
         )}
       </main>
 
-      {/* Bottom Tab Bar nativa en móvil */}
       {typeof document !== 'undefined' &&
         createPortal(
           <nav
@@ -2609,20 +2585,6 @@ export default function TournamentView({
           </nav>,
           document.body
         )}
-        <PlayerCardModal
-        isOpen={Boolean(cardModalParticipant)}
-        participant={cardModalParticipant}
-        tournament={tournament}
-        matches={matches}
-        customMatchdays={customMatchdays}
-        subtournaments={subtournaments}
-        subEntries={subEntries}
-        subEntryMembers={subEntryMembers}
-        subMatches={subMatches}
-        prodePolls={prodePolls}
-        prodeVotes={prodeVotes}
-        onClose={() => setCardModalParticipant(null)}
-      />
     </>
   );
 }
