@@ -24,6 +24,7 @@ import Avatar from './Avatar';
 import LiveTeamDrawModal from './LiveTeamDrawModal';
 
 export default function TeamManagerPanel({
+  scopeName = '',
   participants = [],
   potSets = [],
   potAssignments = [],
@@ -32,6 +33,7 @@ export default function TeamManagerPanel({
   saving = false,
   hasMatchesGenerated = false,
   generatingMatches = false,
+  onBroadcastLiveDraw,
   onOpenPotManager,
   onSaveTeams,
   onGenerateMatches,
@@ -46,7 +48,6 @@ export default function TeamManagerPanel({
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  // Estado del Sorteo en Vivo
   const [liveDrawOpen, setLiveDrawOpen] = useState(false);
   const [liveDrawTargets, setLiveDrawTargets] = useState({});
 
@@ -216,7 +217,6 @@ export default function TeamManagerPanel({
     setIsEditing(false);
   }
 
-  // Vista solo lectura (no admin o equipos ya guardados)
   if (!isAdmin || (!isEditing && savedTeams.length > 0)) {
     return (
       <div className="space-y-4">
@@ -324,7 +324,6 @@ export default function TeamManagerPanel({
     );
   }
 
-  // Modo Constructor / Sorteo (Admin)
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -368,7 +367,6 @@ export default function TeamManagerPanel({
             </div>
           )}
 
-          {/* Panel de configuración: Cantidad de equipos + Bombos */}
           <div className="grid grid-cols-1 gap-3 rounded-2xl border border-slate-200/90 bg-slate-50/75 p-4 sm:grid-cols-2 dark:border-white/[0.08] dark:bg-white/[0.03] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
             <div>
               <span className="mb-2 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
@@ -437,7 +435,6 @@ export default function TeamManagerPanel({
             </div>
           </div>
 
-          {/* Botones de Sorteo: En Vivo vs Rápido */}
           <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
             <motion.button
               type="button"
@@ -462,7 +459,6 @@ export default function TeamManagerPanel({
             </motion.button>
           </div>
 
-          {/* Nombres de los equipos */}
           <div>
             <span className="mb-2 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
               3. Nombres de los equipos
@@ -504,7 +500,6 @@ export default function TeamManagerPanel({
             </div>
           </div>
 
-          {/* Asignación manual / ajuste fino */}
           <div>
             <span className="mb-2 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]">
               4. Asignación de jugadores (Manual o ajustar sorteo)
@@ -589,7 +584,6 @@ export default function TeamManagerPanel({
             </div>
           </div>
 
-          {/* Guardar Equipos */}
           <div className="flex justify-end border-t border-slate-200/80 pt-4 dark:border-white/[0.08]">
             <motion.button
               type="button"
@@ -612,11 +606,13 @@ export default function TeamManagerPanel({
       <LiveTeamDrawModal
         isOpen={liveDrawOpen}
         onClose={() => setLiveDrawOpen(false)}
+        scopeName={scopeName}
         teams={teams}
         participants={participants}
         targetAssignments={liveDrawTargets}
         potMap={activePotSet ? activePotMap : null}
         potSetName={activePotSet?.name || ''}
+        onBroadcastState={onBroadcastLiveDraw}
         onRequestReroll={handleRerollLiveDraw}
         onConfirmDraw={(confirmedAssign) => {
           setAssignments(confirmedAssign);

@@ -57,6 +57,7 @@ export default function SubtournamentDetailView({
   isAdmin,
   currentUserId,
   onOpenPotManager,
+  onBroadcastLiveDraw,
   onBack,
   onRefreshData,
   onSubtournamentDeleted,
@@ -113,7 +114,6 @@ export default function SubtournamentDetailView({
     return Array.from(set).filter(Boolean);
   }, [existingCategories]);
 
-  // Participantes disponibles para armar/sortear equipos en este subtorneo
   const eligibleParticipants = useMemo(() => {
     const selectedIds = subtournament.config?.selected_participant_ids;
     if (Array.isArray(selectedIds) && selectedIds.length > 0) {
@@ -124,7 +124,6 @@ export default function SubtournamentDetailView({
     return participants;
   }, [participants, subtournament.config]);
 
-  // Equipos ya guardados en formato para TeamManagerPanel
   const savedTeams = useMemo(() => {
     if (!isTeamBased) return [];
     const membersById = new Map();
@@ -204,7 +203,6 @@ export default function SubtournamentDetailView({
     setSavingTeams(true);
 
     try {
-      // Limpiar partidos y entradas previas
       await supabase
         .from('subtournament_matches')
         .delete()
@@ -250,7 +248,6 @@ export default function SubtournamentDetailView({
         if (membersError) throw membersError;
       }
 
-      // Ajustar escala de puntos a la cantidad real de equipos
       const nextPointsScale = buildDefaultPointsScale(
         createdEntries.length,
         subtournament.points_scale
@@ -260,7 +257,6 @@ export default function SubtournamentDetailView({
         .update({ points_scale: nextPointsScale })
         .eq('id', subtournament.id);
 
-      // Generar partidos automáticamente si corresponde
       if (
         subtournament.format === 'league' ||
         subtournament.format === 'knockout' ||
@@ -1010,7 +1006,7 @@ export default function SubtournamentDetailView({
         </div>
       )}
 
-      {/* Contenedor con pestañas internas (incluye Equipos si es por equipos) */}
+      {/* Contenedor con pestañas internas */}
       <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/70">
         <div className="flex overflow-x-auto border-b border-slate-200 px-2 pt-1 dark:border-slate-800">
           {isTeamBased && (
@@ -1081,6 +1077,7 @@ export default function SubtournamentDetailView({
         <div className="p-4 sm:p-5">
           {innerTab === 'teams' && isTeamBased ? (
             <TeamManagerPanel
+              scopeName={subtournament.name}
               participants={eligibleParticipants}
               potSets={potSets}
               potAssignments={potAssignments}
@@ -1089,6 +1086,7 @@ export default function SubtournamentDetailView({
               saving={savingTeams}
               hasMatchesGenerated={subMatches.length > 0}
               generatingMatches={generating}
+              onBroadcastLiveDraw={onBroadcastLiveDraw}
               onOpenPotManager={onOpenPotManager}
               onSaveTeams={handleSaveSubTeams}
               onGenerateMatches={

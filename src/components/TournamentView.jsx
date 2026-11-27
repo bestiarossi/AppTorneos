@@ -18,6 +18,7 @@ import {
   PartyPopper,
   Pencil,
   Plus,
+  Radio,
   RefreshCw,
   Share2,
   Shield,
@@ -62,6 +63,7 @@ import {
 import Avatar from './Avatar';
 import CustomMatchdaysTab from './CustomMatchdaysTab';
 import CustomStandingsTab from './CustomStandingsTab';
+import LiveTeamDrawModal from './LiveTeamDrawModal';
 import MatchResultModal from './MatchResultModal';
 import PlayerBadges from './PlayerBadges';
 import PotSetsModal from './PotSetsModal';
@@ -133,6 +135,7 @@ export default function TournamentView({
   const [activeTab, setActiveTab] = useState('standings');
   const [statsSubTab, setStatsSubTab] = useState('summary');
   const [savingTeams, setSavingTeams] = useState(false);
+  const [spectatorDrawOpen, setSpectatorDrawOpen] = useState(false);
   const [mobileHeaderExpanded, setMobileHeaderExpanded] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedInviteLink, setCopiedInviteLink] = useState(false);
@@ -153,6 +156,11 @@ export default function TournamentView({
 
   const participantAvatarInputRef = useRef(null);
   const participantAvatarTargetRef = useRef(null);
+  const tournamentRef = useRef(null);
+
+  useEffect(() => {
+    tournamentRef.current = tournament;
+  }, [tournament]);
 
   const [isEditingTournament, setIsEditingTournament] = useState(false);
   const [editTournamentName, setEditTournamentName] = useState('');
@@ -481,6 +489,7 @@ export default function TournamentView({
     setSelectedSubtournamentId(null);
     setIsPotModalOpen(false);
     setMobileHeaderExpanded(false);
+    setSpectatorDrawOpen(false);
     loadTournamentData();
   }, [loadTournamentData]);
 
@@ -601,7 +610,6 @@ export default function TournamentView({
   const isTeamBasedTournament =
     tournament?.format !== 'custom' && Boolean(tournament?.config?.is_team_based);
 
-  // Para torneos comunes Por Equipos: lista de jugadores individuales (roster) y equipos guardados
   const savedTournamentTeams = useMemo(() => {
     if (!isTeamBasedTournament) return [];
     return Array.isArray(tournament?.config?.teams) ? tournament.config.teams : [];
@@ -734,6 +742,29 @@ export default function TournamentView({
   const myLinkedParticipant =
     enrichedParticipants.find((p) => p.user_id === user.id) || null;
 
+  // Transmisión del Sorteo en Vivo a todos los participantes vía Supabase Realtime
+  const handleBroadcastLiveDraw = useCallback(
+    async (liveDrawPayload) => {
+      const currentT = tournamentRef.current;
+      if (!isAdmin || !currentT) return;
+
+      const nextConfig = { ...(currentT.config || {}) };
+      if (liveDrawPayload) {
+        nextConfig.live_draw = liveDrawPayload;
+      } else {
+        delete nextConfig.live_draw;
+      }
+
+      setTournament((prev) => (prev ? { ...prev, config: nextConfig } : prev));
+
+      await supabase
+        .from('tournaments')
+        .update({ config: nextConfig })
+        .eq('id', currentT.id);
+    },
+    [isAdmin]
+  );
+
   const refreshCustomDataSilently = useCallback(async () => {
     if (!tournament || !membership) return;
     if (tournament.format === 'custom') {
@@ -766,7 +797,6 @@ export default function TournamentView({
     setSavingTeams(true);
 
     try {
-      // Guardar snapshot del plantel individual si es la primera vez
       const rosterSnapshot =
         Array.isArray(tournament.config?.roster_players) &&
         tournament.config.roster_players.length > 0
@@ -778,7 +808,6 @@ export default function TournamentView({
               avatar_url: p.effective_avatar_url || p.avatar_url || null,
             }));
 
-      // Limpiar partidos y participantes anteriores para registrar los equipos como competidores oficiales
       await supabase.from('matches').delete().eq('tournament_id', tournament.id);
       await supabase
         .from('last_standing_eliminations')
@@ -813,6 +842,7 @@ export default function TournamentView({
         roster_players: rosterSnapshot,
         teams: syncedTeams,
       };
+      delete nextConfig.live_draw;
 
       const { data: updatedTournament, error: updErr } = await supabase
         .from('tournaments')
@@ -1536,7 +1566,6 @@ export default function TournamentView({
     }
   }
 
-  // Barra principal limpia (Resumen + Stats unificados; Prode aparte; Equipos solo si aplica)
   const mainTabs = useMemo(() => {
     const list = [
       { id: 'standings', label: 'Tabla', shortLabel: 'Tabla', icon: Table2 },
@@ -1600,6 +1629,7 @@ export default function TournamentView({
   const ActiveTabIcon = activeTabMeta.icon;
   const openPollsCount = prodePolls.filter((p) => p.status === 'open').length;
   const showMobileDetails = mobileHeaderExpanded || isEditingTournament;
+  const liveDraw = tournament?.config?.live_draw || null;
 
   return (
     <>
@@ -1615,7 +1645,7 @@ export default function TournamentView({
             <span>Mis torneos</span>
           </motion.button>
 
-          {/* Acceso dedicado al Prode (apartado de la barra principal) */}
+          {/* Acceso dedicado al Prode */}
           <motion.button
             type="button"
             whileTap={{ scale: 0.96 }}
@@ -1637,6 +1667,41 @@ export default function TournamentView({
             )}
           </motion.button>
         </div>
+
+        {/* Anuncio pulsante EN VIVO para todos los participantes cuando hay un sorteo activo */}
+        <AnimatePresence>
+          {liveDraw?.active && (
+            <motion.button
+              type="button"
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              whileTap={{ scale: 0.985 }}
+              onClick={() => setSpectatorDrawOpen(true)}
+              className="mb-4 flex w-full items-center justify-between gap-3 rounded-2xl border border-rose-400/50 bg-gradient-to-r from-rose-600 via-rose-500 to-orange-500 px-4 py-3 text-left text-white shadow-lg shadow-rose-600/25 dark:border-[#CCFF00]/60 dark:from-[#141923] dark:via-[#141923] dark:to-[#1a2410] dark:shadow-[0_0_24px_-6px_rgba(204,255,0,0.35)] classic:border-2 classic:border-[#1E4638] classic:from-[#D46F4D] classic:to-[#C45D3B] classic:shadow-[3px_3px_0_#1E4638]"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/20 dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:bg-[#FBF5E8] classic:text-[#D46F4D]">
+                  <Radio className="h-5 w-5 animate-pulse" />
+                </span>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 animate-ping rounded-full bg-white dark:bg-[#CCFF00]" />
+                    <span className="text-[10px] font-black tracking-widest uppercase dark:text-[#CCFF00]">
+                      Sorteo en Vivo ahora
+                    </span>
+                  </div>
+                  <p className="truncate text-sm font-extrabold">
+                    {liveDraw.scopeName || tournament.name} — Tocá para ver el bolillero en directo
+                  </p>
+                </div>
+              </div>
+              <span className="shrink-0 rounded-xl bg-white/20 px-3 py-1.5 text-xs font-black tracking-wider uppercase dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:bg-[#1E4638] classic:text-[#FBF5E8]">
+                Ver →
+              </span>
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         <AnimatePresence>
           {error && (
@@ -1666,7 +1731,6 @@ export default function TournamentView({
             className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${sportTheme.heroGradient} classic:opacity-40`}
           />
 
-          {/* Barra compacta exclusiva de móvil: solo Nombre + botón desplegable */}
           {!isEditingTournament && (
             <div className="relative flex items-center justify-between gap-3 lg:hidden">
               <div className="flex min-w-0 items-center gap-2.5">
@@ -1695,7 +1759,6 @@ export default function TournamentView({
             </div>
           )}
 
-          {/* Contenido completo: desplegable en móvil, siempre visible en desktop */}
           <div
             className={`relative flex-col gap-5 lg:flex lg:flex-row lg:items-start lg:justify-between ${
               showMobileDetails
@@ -2112,7 +2175,7 @@ export default function TournamentView({
             className="lg:col-span-8"
           >
             <div className="glass-card overflow-hidden rounded-2xl">
-              {/* Tabs escritorio (limpia: 4 o 5 tabs) */}
+              {/* Tabs escritorio */}
               <div className="relative hidden overflow-x-auto border-b border-slate-200/80 px-2 pt-2 md:flex dark:border-white/[0.08] classic:border-[#1E4638]/20">
                 {mainTabs.map((tab) => {
                   const Icon = tab.icon;
@@ -2208,6 +2271,7 @@ export default function TournamentView({
                           selectedSubtournamentId={selectedSubtournamentId}
                           onSelectSubtournament={setSelectedSubtournamentId}
                           onOpenPotManager={() => setIsPotModalOpen(true)}
+                          onBroadcastLiveDraw={handleBroadcastLiveDraw}
                           onRefreshCustomData={refreshCustomDataSilently}
                         />
                       ) : (
@@ -2240,6 +2304,7 @@ export default function TournamentView({
 
                     {activeTab === 'teams' && isTeamBasedTournament && (
                       <TeamManagerPanel
+                        scopeName={tournament.name}
                         participants={teamRosterPlayers}
                         potSets={potSets}
                         potAssignments={potAssignments}
@@ -2248,6 +2313,7 @@ export default function TournamentView({
                         saving={savingTeams}
                         hasMatchesGenerated={matches.length > 0}
                         generatingMatches={generatingMatches}
+                        onBroadcastLiveDraw={handleBroadcastLiveDraw}
                         onOpenPotManager={() => setIsPotModalOpen(true)}
                         onSaveTeams={handleSaveTournamentTeams}
                         onGenerateMatches={
@@ -2290,7 +2356,6 @@ export default function TournamentView({
                       />
                     )}
 
-                    {/* Resumen + Estadísticas unificados en un solo apartado */}
                     {activeTab === 'stats' && (
                       <div className="space-y-4">
                         <div className="inline-flex rounded-xl border border-slate-200/80 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
@@ -2810,6 +2875,15 @@ export default function TournamentView({
           }
           onSave={handleSaveMatchResult}
           onReset={handleResetMatchResult}
+        />
+
+        {/* Modal Espectador del Sorteo en Vivo */}
+        <LiveTeamDrawModal
+          isOpen={spectatorDrawOpen && Boolean(liveDraw?.active)}
+          onClose={() => setSpectatorDrawOpen(false)}
+          isSpectator
+          remoteState={liveDraw}
+          participants={enrichedParticipants}
         />
 
         {(tournament.format === 'custom' || isTeamBasedTournament) && (

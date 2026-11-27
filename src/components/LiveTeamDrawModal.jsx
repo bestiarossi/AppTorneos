@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Check,
+  Eye,
   FastForward,
   Gauge,
   Layers,
   Pause,
   Play,
+  Radio,
   RotateCcw,
   Sparkles,
   Users,
@@ -60,11 +62,15 @@ const SPEED_OPTIONS = [
 export default function LiveTeamDrawModal({
   isOpen,
   onClose,
+  isSpectator = false,
+  remoteState = null,
+  scopeName = '',
   teams = [],
   participants = [],
   targetAssignments = {},
   potMap = null,
   potSetName = '',
+  onBroadcastState,
   onRequestReroll,
   onConfirmDraw,
 }) {
@@ -79,10 +85,30 @@ export default function LiveTeamDrawModal({
 
   const timersRef = useRef([]);
   const autoTimerRef = useRef(null);
+  const lastRemoteSpinKeyRef = useRef(null);
+  const spectatorConfettiFiredRef = useRef(null);
+
+  const effectiveTeams = useMemo(
+    () => (isSpectator ? remoteState?.teams || [] : teams),
+    [isSpectator, remoteState, teams]
+  );
+
+  const effectivePotSetName = isSpectator
+    ? remoteState?.potSetName || ''
+    : potSetName;
+
+  const effectiveScopeName = isSpectator
+    ? remoteState?.scopeName || ''
+    : scopeName;
+
+  const effectiveSpeedId = isSpectator
+    ? remoteState?.speedId || 'normal'
+    : speedId;
 
   const activeSpeed = useMemo(
-    () => SPEED_OPTIONS.find((s) => s.id === speedId) || SPEED_OPTIONS[1],
-    [speedId]
+    () =>
+      SPEED_OPTIONS.find((s) => s.id === effectiveSpeedId) || SPEED_OPTIONS[1],
+    [effectiveSpeedId]
   );
 
   const participantMap = useMemo(
@@ -91,16 +117,22 @@ export default function LiveTeamDrawModal({
   );
 
   const teamMap = useMemo(
-    () => new Map(teams.map((t) => [t.id, t])),
-    [teams]
+    () => new Map(effectiveTeams.map((t) => [t.id, t])),
+    [effectiveTeams]
   );
 
-  // Ordena el bolillero por Bombo (1, 2, 3...) o al orden asignado
+  // Cola unificada (en modo espectador viene de remoteState.queue)
   const drawQueue = useMemo(() => {
+    if (isSpectator) {
+      return Array.isArray(remoteState?.queue) ? remoteState.queue : [];
+    }
+
     const items = participants
       .filter((p) => Boolean(targetAssignments[p.id]))
       .map((p) => ({
         participantId: p.id,
+        name: p.name,
+        avatarUrl: resolveParticipantAvatar(p),
         teamId: targetAssignments[p.id],
         potNumber: potMap?.get(p.id) ?? 999,
       }));
@@ -110,10 +142,13 @@ export default function LiveTeamDrawModal({
     }
 
     return items;
-  }, [participants, targetAssignments, potMap]);
+  }, [isSpectator, remoteState, participants, targetAssignments, potMap]);
 
   const totalToDraw = drawQueue.length;
-  const isFinished = totalToDraw > 0 && revealedCount >= totalToDraw;
+  const effectiveRevealedCount = isSpectator
+    ? Math.min(remoteState?.revealedCount ?? 0, totalToDraw)
+    : revealedCount;
+  const isFinished = totalToDraw > 0 && effectiveRevealedCount >= totalToDraw;
 
   const clearTimers = useCallback(() => {
     timersRef.current.forEach((id) => clearTimeout(id));
@@ -124,10 +159,41 @@ export default function LiveTeamDrawModal({
     }
   }, []);
 
-  // Reset al abrir o re-sortear
+  // Helper para emitir el estado actual en vivo a todos los participantes
+  const emitBroadcast = useCallback(
+    (overrides = {}) => {
+      if (isSpectator || !onBroadcastState) return;
+      onBroadcastState({
+        active: true,
+        scopeName: scopeName || '',
+        potSetName: potSetName || '',
+        teams: effectiveTeams,
+        queue: drawQueue,
+        revealedCount,
+        spinningIndex: null,
+        speedId,
+        updatedAt: new Date().toISOString(),
+        ...overrides,
+      });
+    },
+    [
+      isSpectator,
+      onBroadcastState,
+      scopeName,
+      potSetName,
+      effectiveTeams,
+      drawQueue,
+      revealedCount,
+      speedId,
+    ]
+  );
+
+  // Reset en modo Host al abrir o re-sortear + emitir inicio en vivo
   useEffect(() => {
+    if (isSpectator) return;
     clearTimers();
     if (!isOpen) return;
+
     setRevealedCount(0);
     setIsSpinning(false);
     setRouletteName('');
@@ -135,7 +201,127 @@ export default function LiveTeamDrawModal({
     setSpinningTeamName('');
     setLastRevealed(null);
     setAutoPlay(false);
-  }, [isOpen, targetAssignments, clearTimers]);
+
+    if (onBroadcastState && drawQueue.length > 0) {
+      onBroadcastState({
+        active: true,
+        drawId: `draw-${Date.now()}`,
+        scopeName: scopeName || '',
+        potSetName: potSetName || '',
+        teams: effectiveTeams,
+        queue: drawQueue,
+        revealedCount: 0,
+        spinningIndex: null,
+        speedId,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, targetAssignments, isSpectator]);
+
+  // Animación local compartida (Host y Espectador corren la misma desaceleración exacta)
+  const runRouletteAnimation = useCallback(
+    (indexToReveal, speedObj, onComplete) => {
+      const nextItem = drawQueue[indexToReveal];
+      if (!nextItem) return;
+
+      const winnerName = nextItem.name || 'Jugador';
+      const targetTeamName = teamMap.get(nextItem.teamId)?.name || 'Equipo';
+      const remainingNames = drawQueue
+        .slice(indexToReveal)
+        .map((item) => item.name || 'Jugador');
+      const otherNames = remainingNames.filter((n) => n !== winnerName);
+
+      clearTimers();
+      setIsSpinning(true);
+      setRouletteLocked(false);
+      setSpinningTeamName(targetTeamName);
+
+      const totalSteps = remainingNames.length <= 1 ? 3 : speedObj.steps;
+      const sequence = [];
+      for (let i = 0; i < totalSteps - 1; i += 1) {
+        if (otherNames.length > 0) {
+          const pool =
+            remainingNames.length > 1 ? remainingNames : [winnerName];
+          let pick = pool[i % pool.length];
+          if (i === totalSteps - 2 && pick === winnerName) {
+            pick = otherNames[i % otherNames.length];
+          }
+          sequence.push(pick);
+        } else {
+          sequence.push(winnerName);
+        }
+      }
+      sequence.push(winnerName);
+
+      let elapsed = 0;
+      sequence.forEach((candidateName, stepIdx) => {
+        const progress = stepIdx / Math.max(1, sequence.length - 1);
+        const stepDelay = Math.round(
+          speedObj.baseDelay +
+            (speedObj.maxDelay - speedObj.baseDelay) * progress * progress
+        );
+
+        const tId = setTimeout(() => {
+          setRouletteName(candidateName);
+          if (stepIdx === sequence.length - 1) {
+            setRouletteLocked(true);
+          }
+        }, elapsed);
+
+        timersRef.current.push(tId);
+        elapsed += stepDelay;
+      });
+
+      const finishId = setTimeout(() => {
+        setIsSpinning(false);
+        setRouletteName('');
+        setRouletteLocked(false);
+        setSpinningTeamName('');
+        onComplete?.(nextItem);
+      }, elapsed + speedObj.lockBeat);
+
+      timersRef.current.push(finishId);
+    },
+    [drawQueue, teamMap, clearTimers]
+  );
+
+  // Sincronización en tiempo real para ESPECTADORES
+  useEffect(() => {
+    if (!isSpectator || !isOpen || !remoteState) return;
+
+    const spinIdx = remoteState.spinningIndex;
+    const spinKey =
+      spinIdx !== null && spinIdx !== undefined
+        ? `${remoteState.drawId || ''}-${spinIdx}`
+        : null;
+
+    if (spinKey && lastRemoteSpinKeyRef.current !== spinKey) {
+      lastRemoteSpinKeyRef.current = spinKey;
+      const remoteSpeed =
+        SPEED_OPTIONS.find((s) => s.id === remoteState.speedId) ||
+        SPEED_OPTIONS[1];
+      runRouletteAnimation(spinIdx, remoteSpeed, (item) => {
+        setLastRevealed(item);
+      });
+    } else if (spinIdx === null || spinIdx === undefined) {
+      const rCount = remoteState.revealedCount ?? 0;
+      if (rCount > 0 && drawQueue[rCount - 1]) {
+        setLastRevealed(drawQueue[rCount - 1]);
+      } else {
+        setLastRevealed(null);
+      }
+
+      if (
+        totalToDraw > 0 &&
+        rCount >= totalToDraw &&
+        spectatorConfettiFiredRef.current !== (remoteState.drawId || 'done')
+      ) {
+        spectatorConfettiFiredRef.current = remoteState.drawId || 'done';
+        triggerChampionConfetti();
+      }
+    }
+  }, [isSpectator, isOpen, remoteState, drawQueue, totalToDraw, runRouletteAnimation]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -148,97 +334,38 @@ export default function LiveTeamDrawModal({
   }, [isOpen, clearTimers]);
 
   const drawNextPlayer = useCallback(() => {
-    if (isSpinning || revealedCount >= totalToDraw) return;
+    if (isSpectator || isSpinning || revealedCount >= totalToDraw) return;
 
-    const nextItem = drawQueue[revealedCount];
-    if (!nextItem) return;
+    // Avisamos a todos los espectadores que empezó el giro para este índice
+    emitBroadcast({ spinningIndex: revealedCount });
 
-    const winnerName =
-      participantMap.get(nextItem.participantId)?.name || 'Jugador';
-    const targetTeamName = teamMap.get(nextItem.teamId)?.name || 'Equipo';
-
-    const remainingNames = drawQueue
-      .slice(revealedCount)
-      .map((item) => participantMap.get(item.participantId)?.name || 'Jugador');
-
-    const otherNames = remainingNames.filter((n) => n !== winnerName);
-
-    setIsSpinning(true);
-    setRouletteLocked(false);
-    setSpinningTeamName(targetTeamName);
-
-    // Si solo queda 1 jugador, gira breve y clava directo en el elegido
-    const totalSteps =
-      remainingNames.length <= 1 ? 3 : activeSpeed.steps;
-
-    // Construimos la secuencia exacta garantizando que el ÚLTIMO nombre sea winnerName
-    const sequence = [];
-    for (let i = 0; i < totalSteps - 1; i += 1) {
-      if (otherNames.length > 0) {
-        // Evitar repetir el mismo nombre dos ticks seguidos cuando hay opciones
-        const pool = remainingNames.length > 1 ? remainingNames : [winnerName];
-        let pick = pool[i % pool.length];
-        // En el penúltimo paso, forzamos que sea distinto al ganador para que el salto final se note
-        if (i === totalSteps - 2 && pick === winnerName) {
-          pick = otherNames[i % otherNames.length];
-        }
-        sequence.push(pick);
-      } else {
-        sequence.push(winnerName);
-      }
-    }
-    sequence.push(winnerName);
-
-    let elapsed = 0;
-    sequence.forEach((candidateName, stepIdx) => {
-      const progress = stepIdx / Math.max(1, sequence.length - 1);
-      // Curva cuadrática para que frene suavemente al final
-      const stepDelay = Math.round(
-        activeSpeed.baseDelay +
-          (activeSpeed.maxDelay - activeSpeed.baseDelay) * progress * progress
-      );
-
-      const tId = setTimeout(() => {
-        setRouletteName(candidateName);
-        if (stepIdx === sequence.length - 1) {
-          setRouletteLocked(true);
-        }
-      }, elapsed);
-
-      timersRef.current.push(tId);
-      elapsed += stepDelay;
-    });
-
-    // Breve pausa viendo el nombre clavado antes de mostrar la tarjeta con el avatar
-    const finishId = setTimeout(() => {
+    runRouletteAnimation(revealedCount, activeSpeed, (revealedItem) => {
       const nextCount = revealedCount + 1;
       setRevealedCount(nextCount);
-      setLastRevealed(nextItem);
-      setRouletteName('');
-      setRouletteLocked(false);
-      setSpinningTeamName('');
-      setIsSpinning(false);
+      setLastRevealed(revealedItem);
+      emitBroadcast({
+        revealedCount: nextCount,
+        spinningIndex: null,
+      });
 
       if (nextCount >= totalToDraw) {
         setAutoPlay(false);
         triggerChampionConfetti();
       }
-    }, elapsed + activeSpeed.lockBeat);
-
-    timersRef.current.push(finishId);
+    });
   }, [
+    isSpectator,
     isSpinning,
     revealedCount,
     totalToDraw,
-    drawQueue,
-    participantMap,
-    teamMap,
     activeSpeed,
+    emitBroadcast,
+    runRouletteAnimation,
   ]);
 
-  // Modo automático respetando la velocidad elegida
+  // Modo automático (solo Host)
   useEffect(() => {
-    if (!isOpen || !autoPlay || isSpinning || isFinished) return;
+    if (isSpectator || !isOpen || !autoPlay || isSpinning || isFinished) return;
 
     autoTimerRef.current = setTimeout(() => {
       drawNextPlayer();
@@ -251,6 +378,7 @@ export default function LiveTeamDrawModal({
       }
     };
   }, [
+    isSpectator,
     isOpen,
     autoPlay,
     isSpinning,
@@ -261,6 +389,7 @@ export default function LiveTeamDrawModal({
   ]);
 
   function handleSkipToEnd() {
+    if (isSpectator) return;
     clearTimers();
     setIsSpinning(false);
     setAutoPlay(false);
@@ -269,25 +398,37 @@ export default function LiveTeamDrawModal({
     setSpinningTeamName('');
     setRevealedCount(totalToDraw);
     setLastRevealed(drawQueue[totalToDraw - 1] || null);
+    emitBroadcast({ revealedCount: totalToDraw, spinningIndex: null });
     triggerChampionConfetti();
+  }
+
+  function handleCloseModal() {
+    clearTimers();
+    if (!isSpectator && onBroadcastState) {
+      onBroadcastState(null);
+    }
+    onClose?.();
   }
 
   function handleConfirm() {
     clearTimers();
+    if (!isSpectator && onBroadcastState) {
+      onBroadcastState(null);
+    }
     onConfirmDraw?.(targetAssignments);
     onClose?.();
   }
 
   const revealedByTeam = useMemo(() => {
-    const map = new Map(teams.map((t) => [t.id, []]));
-    drawQueue.slice(0, revealedCount).forEach((item) => {
+    const map = new Map(effectiveTeams.map((t) => [t.id, []]));
+    drawQueue.slice(0, effectiveRevealedCount).forEach((item) => {
       const list = map.get(item.teamId);
       if (list) list.push(item);
     });
     return map;
-  }, [teams, drawQueue, revealedCount]);
+  }, [effectiveTeams, drawQueue, effectiveRevealedCount]);
 
-  const currentNextItem = drawQueue[revealedCount] || null;
+  const currentNextItem = drawQueue[effectiveRevealedCount] || null;
   const upcomingTeamName = currentNextItem
     ? teamMap.get(currentNextItem.teamId)?.name || 'Equipo'
     : '';
@@ -321,33 +462,34 @@ export default function LiveTeamDrawModal({
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-4 dark:border-white/[0.08] classic:border-b-2 classic:border-[#1E4638] classic:bg-[#1E4638]">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-600 dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:text-[#FBF5E8]">
-                  <Sparkles className="h-5 w-5" />
+                  {isSpectator ? (
+                    <Radio className="h-5 w-5 animate-pulse" />
+                  ) : (
+                    <Sparkles className="h-5 w-5" />
+                  )}
                 </div>
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-rose-600 uppercase dark:bg-[#CCFF00]/20 dark:text-[#CCFF00] classic:bg-[#D9A441] classic:text-[#1E4638]">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" />
-                      EN VIVO
+                      {isSpectator ? 'TRANSMISIÓN EN VIVO' : 'EN VIVO'}
                     </span>
-                    {potSetName && (
+                    {effectivePotSetName && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-300 classic:bg-[#FBF5E8]/20 classic:text-[#FBF5E8]">
                         <Layers className="h-3 w-3" />
-                        {potSetName}
+                        {effectivePotSetName}
                       </span>
                     )}
                   </div>
                   <h2 className="mt-0.5 text-base font-black tracking-tight text-slate-900 uppercase sm:text-lg dark:text-white classic:text-[#FBF5E8]">
-                    Sorteo Oficial de Equipos
+                    Sorteo Oficial{effectiveScopeName ? ` · ${effectiveScopeName}` : ''}
                   </h2>
                 </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => {
-                  clearTimers();
-                  onClose();
-                }}
+                onClick={handleCloseModal}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white classic:text-[#FBF5E8] classic:hover:bg-[#285947]"
                 aria-label="Cerrar sorteo"
               >
@@ -364,7 +506,7 @@ export default function LiveTeamDrawModal({
                 <div className="relative z-10 flex flex-col items-center">
                   <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
                     <span className="rounded-full border border-white/15 bg-white/10 px-3 py-0.5 font-mono text-[11px] font-bold text-slate-200 tabular-nums">
-                      {revealedCount} / {totalToDraw} sorteados
+                      {effectiveRevealedCount} / {totalToDraw} sorteados
                     </span>
                     {activePotLabel && !isFinished && (
                       <span className="rounded-full border border-amber-400/40 bg-amber-400/20 px-2.5 py-0.5 text-[11px] font-extrabold text-amber-300 uppercase">
@@ -435,7 +577,9 @@ export default function LiveTeamDrawModal({
                             Todos los equipos están listos
                           </p>
                           <p className="mt-1 text-xs text-slate-300">
-                            Confirmá abajo para guardar esta formación o sorteá de nuevo.
+                            {isSpectator
+                              ? 'Esperando que el administrador confirme la formación oficial.'
+                              : 'Confirmá abajo para guardar esta formación o sorteá de nuevo.'}
                           </p>
                         </motion.div>
                       ) : lastRevealed ? (
@@ -449,22 +593,19 @@ export default function LiveTeamDrawModal({
                         >
                           <div className="flex items-center gap-3">
                             <Avatar
-                              name={
-                                participantMap.get(lastRevealed.participantId)
-                                  ?.name || ''
+                              name={lastRevealed.name || ''}
+                              url={
+                                lastRevealed.avatarUrl ||
+                                resolveParticipantAvatar(
+                                  participantMap.get(lastRevealed.participantId)
+                                )
                               }
-                              url={resolveParticipantAvatar(
-                                participantMap.get(lastRevealed.participantId)
-                              )}
                               size="lg"
                               highlight
                             />
                             <div className="text-left">
                               <p className="text-xl font-black tracking-tight text-white uppercase sm:text-2xl">
-                                {
-                                  participantMap.get(lastRevealed.participantId)
-                                    ?.name
-                                }
+                                {lastRevealed.name}
                               </p>
                               <p className="mt-0.5 text-xs font-extrabold tracking-wider text-[#CCFF00] uppercase classic:text-[#D9A441]">
                                 ✓ Asignado a{' '}
@@ -482,19 +623,22 @@ export default function LiveTeamDrawModal({
                           className="flex flex-col items-center"
                         >
                           <p className="text-lg font-extrabold tracking-tight text-white uppercase sm:text-xl">
-                            ¿Listos para el sorteo?
+                            {isSpectator
+                              ? 'Esperando al administrador...'
+                              : '¿Listos para el sorteo?'}
                           </p>
                           <p className="mt-1 text-xs text-slate-300">
-                            Tocá <strong>Sacar bolilla</strong> o activá{' '}
-                            <strong>Automático</strong> a la velocidad que prefieras.
+                            {isSpectator
+                              ? 'El sorteo está por comenzar. Vas a ver cada bolilla en tiempo real.'
+                              : 'Tocá Sacar bolilla o activá Automático a la velocidad que prefieras.'}
                           </p>
                         </motion.div>
                       )}
                     </AnimatePresence>
                   </div>
 
-                  {/* Controles del Bolillero + Selector de velocidad */}
-                  {!isFinished && (
+                  {/* Controles exclusivos del Admin */}
+                  {!isSpectator && !isFinished && (
                     <div className="mt-5 flex flex-col items-center gap-3">
                       <div className="flex flex-wrap items-center justify-center gap-2.5">
                         <motion.button
@@ -572,12 +716,19 @@ export default function LiveTeamDrawModal({
                       </div>
                     </div>
                   )}
+
+                  {isSpectator && (
+                    <div className="mt-4 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3.5 py-1.5 text-[11px] font-bold text-slate-200">
+                      <Eye className="h-3.5 w-3.5 text-[#CCFF00]" />
+                      <span>Modo espectador · Controlado por el administrador</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Grilla de Equipos llenándose en vivo */}
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {teams.map((team, idx) => {
+                {effectiveTeams.map((team, idx) => {
                   const members = revealedByTeam.get(team.id) || [];
                   const accentClass =
                     TEAM_ACCENT_COLORS[idx % TEAM_ACCENT_COLORS.length];
@@ -622,44 +773,44 @@ export default function LiveTeamDrawModal({
                       ) : (
                         <ul className="space-y-1.5">
                           <AnimatePresence initial={false}>
-                            {members.map((item) => {
-                              const player = participantMap.get(
-                                item.participantId
-                              );
-                              return (
-                                <motion.li
-                                  key={item.participantId}
-                                  initial={{ opacity: 0, x: -12, scale: 0.9 }}
-                                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                                  transition={{
-                                    type: 'spring',
-                                    stiffness: 420,
-                                    damping: 26,
-                                  }}
-                                  className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 dark:border-white/[0.06] dark:bg-[#141923] classic:border-[#1E4638]/20 classic:bg-[#EFE2CC]"
-                                >
-                                  <div className="flex min-w-0 items-center gap-2">
-                                    <Avatar
-                                      name={player?.name || ''}
-                                      url={resolveParticipantAvatar(player)}
-                                      size="xs"
-                                    />
-                                    <span className="truncate text-xs font-bold text-slate-900 dark:text-white classic:text-[#1E4638]">
-                                      {player?.name || 'Jugador'}
-                                    </span>
-                                  </div>
-                                  {item.potNumber < 999 && (
-                                    <span
-                                      className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold ${getPotBadgeColor(
-                                        item.potNumber
-                                      )}`}
-                                    >
-                                      B{item.potNumber}
-                                    </span>
-                                  )}
-                                </motion.li>
-                              );
-                            })}
+                            {members.map((item) => (
+                              <motion.li
+                                key={item.participantId}
+                                initial={{ opacity: 0, x: -12, scale: 0.9 }}
+                                animate={{ opacity: 1, x: 0, scale: 1 }}
+                                transition={{
+                                  type: 'spring',
+                                  stiffness: 420,
+                                  damping: 26,
+                                }}
+                                className="flex items-center justify-between gap-2 rounded-xl border border-slate-200/70 bg-slate-50/90 px-2.5 py-1.5 dark:border-white/[0.06] dark:bg-[#141923] classic:border-[#1E4638]/20 classic:bg-[#EFE2CC]"
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <Avatar
+                                    name={item.name || ''}
+                                    url={
+                                      item.avatarUrl ||
+                                      resolveParticipantAvatar(
+                                        participantMap.get(item.participantId)
+                                      )
+                                    }
+                                    size="xs"
+                                  />
+                                  <span className="truncate text-xs font-bold text-slate-900 dark:text-white classic:text-[#1E4638]">
+                                    {item.name || 'Jugador'}
+                                  </span>
+                                </div>
+                                {item.potNumber < 999 && (
+                                  <span
+                                    className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-bold ${getPotBadgeColor(
+                                      item.potNumber
+                                    )}`}
+                                  >
+                                    B{item.potNumber}
+                                  </span>
+                                )}
+                              </motion.li>
+                            ))}
                           </AnimatePresence>
                         </ul>
                       )}
@@ -669,45 +820,59 @@ export default function LiveTeamDrawModal({
               </div>
             </div>
 
-            {/* Footer de confirmación */}
+            {/* Footer */}
             <div className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-t border-slate-200/80 bg-white/95 px-5 py-3.5 pb-[max(0.85rem,env(safe-area-inset-bottom))] dark:border-white/[0.08] dark:bg-[#141923] classic:border-t-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
-              {onRequestReroll ? (
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.96 }}
-                  disabled={isSpinning}
-                  onClick={onRequestReroll}
-                  className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8] classic:text-[#1E4638]"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                  <span>Sortear de nuevo</span>
-                </motion.button>
+              {isSpectator ? (
+                <>
+                  <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 classic:text-[#315E4E]">
+                    Los resultados se sincronizan automáticamente en vivo.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCloseModal}
+                    className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-200"
+                  >
+                    Cerrar vista
+                  </button>
+                </>
               ) : (
-                <div />
-              )}
+                <>
+                  {onRequestReroll ? (
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.96 }}
+                      disabled={isSpinning}
+                      onClick={onRequestReroll}
+                      className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8] classic:text-[#1E4638]"
+                    >
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      <span>Sortear de nuevo</span>
+                    </motion.button>
+                  ) : (
+                    <div />
+                  )}
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    clearTimers();
-                    onClose();
-                  }}
-                  className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-300"
-                >
-                  Cancelar
-                </button>
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.97 }}
-                  disabled={!isFinished}
-                  onClick={handleConfirm}
-                  className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-md transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#1E4638]"
-                >
-                  <Check className="h-4 w-4 stroke-[2.5]" />
-                  <span>Confirmar equipos</span>
-                </motion.button>
-              </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleCloseModal}
+                      className="min-h-[42px] rounded-xl border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 dark:border-white/[0.1] dark:bg-white/5 dark:text-slate-300"
+                    >
+                      Cancelar
+                    </button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.97 }}
+                      disabled={!isFinished}
+                      onClick={handleConfirm}
+                      className="inline-flex min-h-[42px] items-center gap-1.5 rounded-xl bg-emerald-600 px-5 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-md transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#1E4638]"
+                    >
+                      <Check className="h-4 w-4 stroke-[2.5]" />
+                      <span>Confirmar equipos</span>
+                    </motion.button>
+                  </div>
+                </>
+              )}
             </div>
           </motion.div>
         </motion.div>
