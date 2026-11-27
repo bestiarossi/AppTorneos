@@ -135,6 +135,7 @@ export default function TournamentView({
   const [activeTab, setActiveTab] = useState('standings');
   const [statsSubTab, setStatsSubTab] = useState('summary');
   const [savingTeams, setSavingTeams] = useState(false);
+  const [liveDrawState, setLiveDrawState] = useState(null);
   const [spectatorDrawOpen, setSpectatorDrawOpen] = useState(false);
   const [mobileHeaderExpanded, setMobileHeaderExpanded] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -157,6 +158,7 @@ export default function TournamentView({
   const participantAvatarInputRef = useRef(null);
   const participantAvatarTargetRef = useRef(null);
   const tournamentRef = useRef(null);
+  const liveDrawChannelRef = useRef(null);
 
   useEffect(() => {
     tournamentRef.current = tournament;
@@ -431,6 +433,7 @@ export default function TournamentView({
       const tData = tournamentRes.data;
 
       setTournament(tData);
+      setLiveDrawState(tData.config?.live_draw?.active ? tData.config.live_draw : null);
       setMembership(mData);
       setMembers(allMembers);
       setParticipants(participantsRes.data || []);
@@ -490,6 +493,7 @@ export default function TournamentView({
     setIsPotModalOpen(false);
     setMobileHeaderExpanded(false);
     setSpectatorDrawOpen(false);
+    setLiveDrawState(null);
     loadTournamentData();
   }, [loadTournamentData]);
 
@@ -524,6 +528,32 @@ export default function TournamentView({
       )
     );
   }, [profile]);
+
+  // Canal Realtime Broadcast dedicado para el Sorteo en Vivo (cero configuración extra en Supabase)
+  useEffect(() => {
+    if (!supabase || !tournamentId) return;
+
+    const liveChannel = supabase
+      .channel(`live-draw-${tournamentId}`, {
+        config: { broadcast: { self: false } },
+      })
+      .on('broadcast', { event: 'live_draw_update' }, ({ payload }) => {
+        if (payload?.liveDraw?.active) {
+          setLiveDrawState(payload.liveDraw);
+        } else {
+          setLiveDrawState(null);
+          setSpectatorDrawOpen(false);
+        }
+      })
+      .subscribe();
+
+    liveDrawChannelRef.current = liveChannel;
+
+    return () => {
+      liveDrawChannelRef.current = null;
+      supabase.removeChannel(liveChannel);
+    };
+  }, [tournamentId]);
 
   useEffect(() => {
     if (!supabase || !tournamentId) return;
@@ -565,6 +595,8 @@ export default function TournamentView({
         (payload) => {
           if (payload?.new) {
             setTournament((prev) => (prev ? { ...prev, ...payload.new } : payload.new));
+            const remoteDraw = payload.new?.config?.live_draw;
+            setLiveDrawState(remoteDraw?.active ? remoteDraw : null);
           }
         }
       )
@@ -742,12 +774,23 @@ export default function TournamentView({
   const myLinkedParticipant =
     enrichedParticipants.find((p) => p.user_id === user.id) || null;
 
-  // Transmisión del Sorteo en Vivo a todos los participantes vía Supabase Realtime
+  // Transmisión del Sorteo en Vivo: Broadcast instantáneo + persistencia en DB
   const handleBroadcastLiveDraw = useCallback(
     async (liveDrawPayload) => {
       const currentT = tournamentRef.current;
       if (!isAdmin || !currentT) return;
 
+      // 1. Estado local inmediato
+      setLiveDrawState(liveDrawPayload?.active ? liveDrawPayload : null);
+
+      // 2. Broadcast instantáneo por WebSocket a todos los participantes conectados
+      liveDrawChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'live_draw_update',
+        payload: { liveDraw: liveDrawPayload || null },
+      });
+
+      // 3. Persistencia en tournaments.config para quienes entren a mitad del sorteo
       const nextConfig = { ...(currentT.config || {}) };
       if (liveDrawPayload) {
         nextConfig.live_draw = liveDrawPayload;
@@ -853,6 +896,12 @@ export default function TournamentView({
 
       if (updErr) throw updErr;
 
+      setLiveDrawState(null);
+      liveDrawChannelRef.current?.send({
+        type: 'broadcast',
+        event: 'live_draw_update',
+        payload: { liveDraw: null },
+      });
       setTournament(updatedTournament);
       setParticipants(createdTeamParticipants || []);
       setMatches([]);
@@ -1629,7 +1678,7 @@ export default function TournamentView({
   const ActiveTabIcon = activeTabMeta.icon;
   const openPollsCount = prodePolls.filter((p) => p.status === 'open').length;
   const showMobileDetails = mobileHeaderExpanded || isEditingTournament;
-  const liveDraw = tournament?.config?.live_draw || null;
+  const liveDraw = liveDrawState || tournament?.config?.live_draw || null;
 
   return (
     <>
@@ -1717,7 +1766,7 @@ export default function TournamentView({
           )}
         </AnimatePresence>
 
-        {/* Encabezado del Torneo — Compacto desplegable en móvil, completo en escritorio */}
+        {/* Encabezado del Torneo */}
         <motion.section
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
