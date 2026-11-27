@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
+  CheckCircle2,
   CheckSquare,
   Layers,
   Loader2,
@@ -27,7 +28,10 @@ import {
   assignTeamsBalancedWithPots,
   getPotBadgeColor,
 } from '../utils/potBalancer';
-import { shuffleArray } from '../utils/tournamentEngine';
+import {
+  shuffleArray,
+  validateGroupStageConfig,
+} from '../utils/tournamentEngine';
 
 export default function CreateSubtournamentModal({
   isOpen,
@@ -47,6 +51,15 @@ export default function CreateSubtournamentModal({
   const [format, setFormat] = useState('league');
   const [homeAndAway, setHomeAndAway] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
+
+  // Opciones específicas cuando format === 'group_stage'
+  const [groupCount, setGroupCount] = useState('2');
+  const [directPerGroup, setDirectPerGroup] = useState('2');
+  const [playoffPerGroup, setPlayoffPerGroup] = useState('0');
+  const [bestThirdsCount, setBestThirdsCount] = useState('0');
+  const [bestThirdsDest, setBestThirdsDest] = useState('direct');
+  const [groupHomeAndAway, setGroupHomeAndAway] = useState(false);
+  const [koHomeAndAway, setKoHomeAndAway] = useState(false);
 
   const [selectedParticipantIds, setSelectedParticipantIds] = useState([]);
   const [isTeamBased, setIsTeamBased] = useState(false);
@@ -76,6 +89,13 @@ export default function CreateSubtournamentModal({
     setFormat('league');
     setHomeAndAway(false);
     setThirdPlace(false);
+    setGroupCount('2');
+    setDirectPerGroup('2');
+    setPlayoffPerGroup('0');
+    setBestThirdsCount('0');
+    setBestThirdsDest('direct');
+    setGroupHomeAndAway(false);
+    setKoHomeAndAway(false);
     setSelectedParticipantIds(allIds);
     setIsTeamBased(false);
     setTeams([
@@ -130,6 +150,24 @@ export default function CreateSubtournamentModal({
     if (!isOpen) return;
     setPointsScale((prev) => buildDefaultPointsScale(competitorCount, prev));
   }, [competitorCount, isOpen]);
+
+  const groupStageValidation = useMemo(() => {
+    if (format !== 'group_stage') return null;
+    return validateGroupStageConfig({
+      group_count: groupCount,
+      direct_per_group: directPerGroup,
+      playoff_per_group: playoffPerGroup,
+      best_thirds_count: bestThirdsCount,
+      best_thirds_destination: bestThirdsDest,
+    });
+  }, [
+    format,
+    groupCount,
+    directPerGroup,
+    playoffPerGroup,
+    bestThirdsCount,
+    bestThirdsDest,
+  ]);
 
   const activePotSet = useMemo(
     () => potSets.find((ps) => ps.id === selectedPotSetId) || null,
@@ -270,6 +308,11 @@ export default function CreateSubtournamentModal({
       return;
     }
 
+    if (format === 'group_stage' && groupStageValidation && !groupStageValidation.isValid) {
+      setError(groupStageValidation.errors[0]);
+      return;
+    }
+
     if (isTeamBased) {
       if (teams.length < 2) {
         setError('Debe haber al menos 2 equipos.');
@@ -329,15 +372,33 @@ export default function CreateSubtournamentModal({
 
     const cleanCategory = category.trim() || null;
 
-    const config = {
+    let config = {
       is_team_based: isTeamBased,
       ...(cleanCategory ? { category: cleanCategory } : {}),
     };
+
     if (format === 'league') {
       config.home_and_away = homeAndAway;
     } else if (format === 'knockout') {
       config.home_and_away = homeAndAway;
       config.third_place = thirdPlace && competitorCount >= 4;
+    } else if (format === 'group_stage') {
+      const gc = Math.max(1, Number.parseInt(groupCount || '2', 10) || 2);
+      const dp = Math.max(0, Number.parseInt(directPerGroup || '2', 10) || 0);
+      const pp = Math.max(0, Number.parseInt(playoffPerGroup || '0', 10) || 0);
+      const bt = Math.max(0, Number.parseInt(bestThirdsCount || '0', 10) || 0);
+
+      config = {
+        ...config,
+        group_count: gc,
+        direct_per_group: dp,
+        playoff_per_group: pp,
+        best_thirds_count: bt,
+        best_thirds_destination: bestThirdsDest,
+        group_home_and_away: groupHomeAndAway,
+        knockout_home_and_away: koHomeAndAway,
+        third_place: thirdPlace,
+      };
     }
 
     setSubmitting(true);
@@ -416,7 +477,11 @@ export default function CreateSubtournamentModal({
         if (membersError) throw membersError;
       }
 
-      if (format === 'league' || format === 'knockout') {
+      if (
+        format === 'league' ||
+        format === 'knockout' ||
+        format === 'group_stage'
+      ) {
         const matchPayloads = generateSubtournamentMatches(
           createdSub,
           createdEntries
@@ -550,9 +615,7 @@ export default function CreateSubtournamentModal({
                         <button
                           key={cat}
                           type="button"
-                          onClick={() =>
-                            setCategory(active ? '' : cat)
-                          }
+                          onClick={() => setCategory(active ? '' : cat)}
                           className={`min-h-[36px] rounded-xl border px-2.5 py-1 text-xs font-bold transition ${
                             active
                               ? 'border-indigo-500 bg-indigo-600 text-white shadow-2xs'
@@ -631,6 +694,167 @@ export default function CreateSubtournamentModal({
                           <span>Partido por el 3.º puesto (4+ comp.)</span>
                         </label>
                       )}
+                    </div>
+                  )}
+
+                  {format === 'group_stage' && (
+                    <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/45">
+                      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Cant. grupos
+                          </label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={16}
+                            value={groupCount}
+                            onChange={(e) => setGroupCount(e.target.value)}
+                            className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Directos / grupo
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={directPerGroup}
+                            onChange={(e) => setDirectPerGroup(e.target.value)}
+                            className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            A Playoff / grupo
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={10}
+                            value={playoffPerGroup}
+                            onChange={(e) => setPlayoffPerGroup(e.target.value)}
+                            className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="mb-1 block text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                            Mejores{' '}
+                            {Number(directPerGroup || 0) +
+                              Number(playoffPerGroup || 0) +
+                              1}
+                            .º
+                          </label>
+                          <input
+                            type="number"
+                            min={0}
+                            max={16}
+                            value={bestThirdsCount}
+                            onChange={(e) => setBestThirdsCount(e.target.value)}
+                            className="min-h-[44px] w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-center text-base font-extrabold text-slate-900 focus:border-emerald-500 focus:outline-none sm:text-sm dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      {Number(bestThirdsCount || 0) > 0 && (
+                        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-700 dark:bg-slate-900">
+                          <span className="font-bold text-slate-600 dark:text-slate-300">
+                            Destino mejores terceros:
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setBestThirdsDest('direct')}
+                            className={`min-h-[36px] rounded-lg px-2.5 py-1 font-bold transition ${
+                              bestThirdsDest === 'direct'
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                          >
+                            Directo a llave final
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBestThirdsDest('playoff')}
+                            className={`min-h-[36px] rounded-lg px-2.5 py-1 font-bold transition ${
+                              bestThirdsDest === 'playoff'
+                                ? 'bg-amber-600 text-white'
+                                : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'
+                            }`}
+                          >
+                            Al Playoff
+                          </button>
+                        </div>
+                      )}
+
+                      {groupStageValidation && (
+                        <div
+                          className={`rounded-xl border p-3 text-xs ${
+                            groupStageValidation.isValid
+                              ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-200'
+                              : 'border-rose-200 bg-rose-50 text-rose-800 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200'
+                          }`}
+                        >
+                          {groupStageValidation.isValid ? (
+                            <div className="space-y-1">
+                              <p className="flex items-center gap-1.5 font-extrabold">
+                                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                                <span>
+                                  {groupStageValidation.parsed.totalPlayoff > 0
+                                    ? `${groupStageValidation.parsed.totalDirect} dir. + ${groupStageValidation.parsed.totalPlayoff} Playoff → ${groupStageValidation.parsed.mainBracketCount} en llave final (Potencia de 2 ✓)`
+                                    : `Total clasificados: ${groupStageValidation.parsed.totalDirect} (Potencia de 2 ✓)`}
+                                </span>
+                              </p>
+                              <p className="text-[11px] opacity-90">
+                                Fase final: {groupStageValidation.bracketPreview}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="flex items-start gap-1.5 font-bold">
+                              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                              <span>{groupStageValidation.errors[0]}</span>
+                            </p>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={groupHomeAndAway}
+                            onChange={(e) =>
+                              setGroupHomeAndAway(e.target.checked)
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>Grupos ida y vuelta</span>
+                        </label>
+                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={koHomeAndAway}
+                            onChange={(e) =>
+                              setKoHomeAndAway(e.target.checked)
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>Elim. ida y vuelta</span>
+                        </label>
+                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={thirdPlace}
+                            onChange={(e) => setThirdPlace(e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>Con 3.º puesto</span>
+                        </label>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -1053,7 +1277,13 @@ export default function CreateSubtournamentModal({
               <button
                 type="submit"
                 form="create-subtournament-form"
-                disabled={submitting || participants.length < 2}
+                disabled={
+                  submitting ||
+                  participants.length < 2 ||
+                  (format === 'group_stage' &&
+                    groupStageValidation &&
+                    !groupStageValidation.isValid)
+                }
                 className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2.5 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition active:scale-[0.99] hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60 sm:flex-none"
               >
                 {submitting && <Loader2 className="h-4 w-4 animate-spin" />}

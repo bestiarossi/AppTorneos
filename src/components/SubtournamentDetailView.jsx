@@ -27,7 +27,10 @@ import {
   getSubtournamentCategory,
   getSubtournamentFormatMeta,
 } from '../utils/customTournamentEngine';
-import { getKnockoutSeriesStatus } from '../utils/tournamentEngine';
+import {
+  buildGroupStageProgressionPatches,
+  getKnockoutSeriesStatus,
+} from '../utils/tournamentEngine';
 import { buildSubtournamentWhatsAppText } from '../utils/whatsappShare';
 import Avatar from './Avatar';
 import FinalizeSubtournamentModal from './FinalizeSubtournamentModal';
@@ -188,94 +191,61 @@ export default function SubtournamentDetailView({
   }
 
   async function syncSubKnockoutProgression(latestRows) {
-    if (subtournament.format !== 'knockout') return;
+    if (subtournament.format === 'knockout') {
+      const regularMaxRound = latestRows
+        .filter((m) => m.round_name !== 'Tercer puesto')
+        .reduce((max, m) => Math.max(max, m.round_number), 0);
 
-    const regularMaxRound = latestRows
-      .filter((m) => m.round_name !== 'Tercer puesto')
-      .reduce((max, m) => Math.max(max, m.round_number), 0);
+      if (regularMaxRound < 2) return;
 
-    if (regularMaxRound < 2) return;
+      const adapted = adaptSubMatchesToMatches(latestRows);
+      const updatesById = new Map();
 
-    const adapted = adaptSubMatchesToMatches(latestRows);
-    const updatesById = new Map();
-
-    for (let r = 1; r < regularMaxRound; r += 1) {
-      const roundMatches = adapted.filter(
-        (m) => m.round_number === r && m.round_name !== 'Tercer puesto'
-      );
-      const matchOrders = Array.from(
-        new Set(roundMatches.map((m) => m.match_order))
-      ).sort((a, b) => a - b);
-
-      matchOrders.forEach((order) => {
-        const tieMatches = roundMatches.filter((m) => m.match_order === order);
-        const series = getKnockoutSeriesStatus(tieMatches);
-        const nextRound = r + 1;
-        const nextOrder = Math.ceil(order / 2);
-        const isTopSlot = order % 2 === 1;
-        const nextWinnerId = series.isCompleted ? series.winnerId : null;
-
-        const targetMatches = adapted.filter(
-          (m) =>
-            m.round_number === nextRound &&
-            m.match_order === nextOrder &&
-            m.round_name !== 'Tercer puesto'
+      for (let r = 1; r < regularMaxRound; r += 1) {
+        const roundMatches = adapted.filter(
+          (m) => m.round_number === r && m.round_name !== 'Tercer puesto'
         );
+        const matchOrders = Array.from(
+          new Set(roundMatches.map((m) => m.match_order))
+        ).sort((a, b) => a - b);
 
-        targetMatches.forEach((target) => {
-          let fieldToSet = null;
-          let adaptedField = null;
-          if (target.leg === 1) {
-            fieldToSet = isTopSlot ? 'entry_a_id' : 'entry_b_id';
-            adaptedField = isTopSlot ? 'participant_a_id' : 'participant_b_id';
-          } else {
-            fieldToSet = isTopSlot ? 'entry_b_id' : 'entry_a_id';
-            adaptedField = isTopSlot ? 'participant_b_id' : 'participant_a_id';
-          }
+        matchOrders.forEach((order) => {
+          const tieMatches = roundMatches.filter((m) => m.match_order === order);
+          const series = getKnockoutSeriesStatus(tieMatches);
+          const nextRound = r + 1;
+          const nextOrder = Math.ceil(order / 2);
+          const isTopSlot = order % 2 === 1;
+          const nextWinnerId = series.isCompleted ? series.winnerId : null;
 
-          if (target[adaptedField] !== nextWinnerId) {
-            target[adaptedField] = nextWinnerId;
-            target.score_a = null;
-            target.score_b = null;
-            target.winner_id = null;
-            target.is_draw = false;
-            target.status = 'pending';
-
-            updatesById.set(target.id, {
-              id: target.id,
-              [fieldToSet]: nextWinnerId,
-              score_a: null,
-              score_b: null,
-              winner_entry_id: null,
-              is_draw: false,
-              status: 'pending',
-            });
-          }
-        });
-
-        const isSemifinalRound = r === regularMaxRound - 1;
-        if (isSemifinalRound) {
-          const thirdPlaceMatch = adapted.find(
-            (m) => m.round_name === 'Tercer puesto'
+          const targetMatches = adapted.filter(
+            (m) =>
+              m.round_number === nextRound &&
+              m.match_order === nextOrder &&
+              m.round_name !== 'Tercer puesto'
           );
-          if (thirdPlaceMatch) {
-            const loserId = series.isCompleted ? series.loserId : null;
-            const fieldToSet = isTopSlot ? 'entry_a_id' : 'entry_b_id';
-            const adaptedField = isTopSlot
-              ? 'participant_a_id'
-              : 'participant_b_id';
 
-            if (thirdPlaceMatch[adaptedField] !== loserId) {
-              thirdPlaceMatch[adaptedField] = loserId;
-              thirdPlaceMatch.score_a = null;
-              thirdPlaceMatch.score_b = null;
-              thirdPlaceMatch.winner_id = null;
-              thirdPlaceMatch.is_draw = false;
-              thirdPlaceMatch.status = 'pending';
+          targetMatches.forEach((target) => {
+            let fieldToSet = null;
+            let adaptedField = null;
+            if (target.leg === 1) {
+              fieldToSet = isTopSlot ? 'entry_a_id' : 'entry_b_id';
+              adaptedField = isTopSlot ? 'participant_a_id' : 'participant_b_id';
+            } else {
+              fieldToSet = isTopSlot ? 'entry_b_id' : 'entry_a_id';
+              adaptedField = isTopSlot ? 'participant_b_id' : 'participant_a_id';
+            }
 
-              updatesById.set(thirdPlaceMatch.id, {
-                id: thirdPlaceMatch.id,
-                [fieldToSet]: loserId,
+            if (target[adaptedField] !== nextWinnerId) {
+              target[adaptedField] = nextWinnerId;
+              target.score_a = null;
+              target.score_b = null;
+              target.winner_id = null;
+              target.is_draw = false;
+              target.status = 'pending';
+
+              updatesById.set(target.id, {
+                id: target.id,
+                [fieldToSet]: nextWinnerId,
                 score_a: null,
                 score_b: null,
                 winner_entry_id: null,
@@ -283,17 +253,81 @@ export default function SubtournamentDetailView({
                 status: 'pending',
               });
             }
-          }
-        }
-      });
-    }
+          });
 
-    if (updatesById.size > 0) {
-      await Promise.all(
-        Array.from(updatesById.values()).map(({ id, ...patch }) =>
-          supabase.from('subtournament_matches').update(patch).eq('id', id)
-        )
+          const isSemifinalRound = r === regularMaxRound - 1;
+          if (isSemifinalRound) {
+            const thirdPlaceMatch = adapted.find(
+              (m) => m.round_name === 'Tercer puesto'
+            );
+            if (thirdPlaceMatch) {
+              const loserId = series.isCompleted ? series.loserId : null;
+              const fieldToSet = isTopSlot ? 'entry_a_id' : 'entry_b_id';
+              const adaptedField = isTopSlot
+                ? 'participant_a_id'
+                : 'participant_b_id';
+
+              if (thirdPlaceMatch[adaptedField] !== loserId) {
+                thirdPlaceMatch[adaptedField] = loserId;
+                thirdPlaceMatch.score_a = null;
+                thirdPlaceMatch.score_b = null;
+                thirdPlaceMatch.winner_id = null;
+                thirdPlaceMatch.is_draw = false;
+                thirdPlaceMatch.status = 'pending';
+
+                updatesById.set(thirdPlaceMatch.id, {
+                  id: thirdPlaceMatch.id,
+                  [fieldToSet]: loserId,
+                  score_a: null,
+                  score_b: null,
+                  winner_entry_id: null,
+                  is_draw: false,
+                  status: 'pending',
+                });
+              }
+            }
+          }
+        });
+      }
+
+      if (updatesById.size > 0) {
+        await Promise.all(
+          Array.from(updatesById.values()).map(({ id, ...patch }) =>
+            supabase.from('subtournament_matches').update(patch).eq('id', id)
+          )
+        );
+      }
+    } else if (subtournament.format === 'group_stage') {
+      const adapted = adaptSubMatchesToMatches(latestRows);
+      const patches = buildGroupStageProgressionPatches(
+        pseudoTournament,
+        adaptedEntries,
+        adapted
       );
+
+      if (patches.length > 0) {
+        await Promise.all(
+          patches.map(({ id, ...patch }) => {
+            const mappedPatch = { ...patch };
+            if ('participant_a_id' in mappedPatch) {
+              mappedPatch.entry_a_id = mappedPatch.participant_a_id;
+              delete mappedPatch.participant_a_id;
+            }
+            if ('participant_b_id' in mappedPatch) {
+              mappedPatch.entry_b_id = mappedPatch.participant_b_id;
+              delete mappedPatch.participant_b_id;
+            }
+            if ('winner_id' in mappedPatch) {
+              mappedPatch.winner_entry_id = mappedPatch.winner_id;
+              delete mappedPatch.winner_id;
+            }
+            return supabase
+              .from('subtournament_matches')
+              .update(mappedPatch)
+              .eq('id', id);
+          })
+        );
+      }
     }
   }
 
@@ -548,6 +582,13 @@ export default function SubtournamentDetailView({
   const finalizedEntries = [...entries].sort(
     (a, b) => (a.final_rank ?? 999) - (b.final_rank ?? 999)
   );
+
+  const matchModalFormat =
+    subtournament.format === 'group_stage'
+      ? matchModalState.match?.stage === 'group'
+        ? 'league'
+        : 'knockout'
+      : subtournament.format;
 
   return (
     <div className="space-y-5">
@@ -865,6 +906,7 @@ export default function SubtournamentDetailView({
         </div>
       )}
 
+      {/* Selector de Contenido */}
       {subtournament.format === 'manual' ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/70">
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -961,6 +1003,8 @@ export default function SubtournamentDetailView({
               <span>
                 {subtournament.format === 'last_standing'
                   ? 'Eliminaciones'
+                  : subtournament.format === 'group_stage'
+                  ? 'Grupos y Cruces'
                   : 'Cruces / Partidos'}
               </span>
             </button>
@@ -1020,7 +1064,7 @@ export default function SubtournamentDetailView({
         isOpen={matchModalState.isOpen}
         match={matchModalState.match}
         siblingLeg={matchModalState.siblingLeg}
-        tournamentFormat={subtournament.format}
+        tournamentFormat={matchModalFormat}
         participantMap={entryMap}
         onClose={() =>
           setMatchModalState({ isOpen: false, match: null, siblingLeg: null })

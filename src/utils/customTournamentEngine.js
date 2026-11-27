@@ -1,7 +1,9 @@
 import {
+  computeGroupStageStandings,
   computeKnockoutSummary,
   computeLastStandingStandings,
   computeLeagueStandings,
+  generateGroupStageMatches,
   generateKnockoutMatches,
   generateLeagueMatches,
 } from './tournamentEngine';
@@ -37,6 +39,13 @@ export const SUBTOURNAMENT_FORMATS = {
     label: 'Eliminatoria',
     description: 'Llaves directas con avance automático hasta la final.',
     badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+  },
+  group_stage: {
+    value: 'group_stage',
+    label: 'Grupos + Eliminación',
+    description: 'Fase de grupos configurable hacia llaves de eliminación final.',
+    badgeClass:
+      'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
   },
   last_standing: {
     value: 'last_standing',
@@ -144,6 +153,8 @@ export function adaptSubMatchesToMatches(subMatches) {
     participant_a_id: m.entry_a_id,
     participant_b_id: m.entry_b_id,
     winner_id: m.winner_entry_id,
+    stage: m.stage || (m.round_name?.includes('Grupo') ? 'group' : 'knockout'),
+    group_name: m.group_name || null,
   }));
 }
 
@@ -171,12 +182,20 @@ export function generateSubtournamentMatches(subtournament, entries) {
     rawMatches = generateLeagueMatches(pseudoTournament, adaptedEntries);
   } else if (subtournament.format === 'knockout') {
     rawMatches = generateKnockoutMatches(pseudoTournament, adaptedEntries);
+  } else if (subtournament.format === 'group_stage') {
+    rawMatches = generateGroupStageMatches(
+      pseudoTournament,
+      adaptedEntries,
+      subtournament.config?.group_assignments || null
+    );
   } else {
     return [];
   }
 
   return rawMatches.map((m) => ({
     subtournament_id: subtournament.id,
+    stage: m.stage || null,
+    group_name: m.group_name || null,
     round_number: m.round_number,
     round_name: m.round_name,
     match_order: m.match_order,
@@ -255,6 +274,69 @@ export function computeSuggestedSubtournamentRanks(
         detail: row.statusLabel,
       };
     });
+  }
+
+  if (subtournament.format === 'group_stage') {
+    const pseudoTournament = {
+      id: subtournament.id,
+      config: subtournament.config || {},
+    };
+    const gs = computeGroupStageStandings(
+      pseudoTournament,
+      adaptedEntries,
+      adaptedMatches
+    );
+
+    // Si la llave final tiene resultados
+    if (gs.knockoutSummary?.rows?.length > 0) {
+      const koRows = gs.knockoutSummary.rows;
+      const seenIds = new Set();
+      const result = [];
+
+      koRows.forEach((r, idx) => {
+        seenIds.add(r.participant.id);
+        result.push({
+          entry: r.participant,
+          rank: idx + 1,
+          points: getPointsForRank(pointsScale, idx + 1),
+          detail: r.statusLabel,
+        });
+      });
+
+      // Agregar los que no clasificaron a eliminación según su posición en grupos
+      let fallbackRank = result.length + 1;
+      gs.groups.forEach((g) => {
+        g.rows.forEach((r) => {
+          if (!seenIds.has(r.participant.id)) {
+            result.push({
+              entry: r.participant,
+              rank: fallbackRank,
+              points: getPointsForRank(pointsScale, fallbackRank),
+              detail: `${g.groupName} · ${r.rank}.º puesto`,
+            });
+            fallbackRank += 1;
+          }
+        });
+      });
+
+      return result;
+    }
+
+    // Si aún solo se jugaron grupos
+    let currentRank = 1;
+    const fallbackList = [];
+    gs.groups.forEach((g) => {
+      g.rows.forEach((r) => {
+        fallbackList.push({
+          entry: r.participant,
+          rank: currentRank,
+          points: getPointsForRank(pointsScale, currentRank),
+          detail: `${g.groupName} (${r.pts} pts)`,
+        });
+        currentRank += 1;
+      });
+    });
+    return fallbackList;
   }
 
   if (subtournament.format === 'last_standing') {
