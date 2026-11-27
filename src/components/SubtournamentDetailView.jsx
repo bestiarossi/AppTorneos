@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
   Award,
@@ -65,6 +65,7 @@ export default function SubtournamentDetailView({
   const isCompleted = subtournament.status === 'completed';
   const canEdit = isAdmin && !isCompleted;
   const isTeamBased = Boolean(subtournament.config?.is_team_based);
+  const fallbackChannelRef = useRef(null);
 
   const [innerTab, setInnerTab] = useState(() => {
     if (isTeamBased && entries.length === 0) return 'teams';
@@ -99,6 +100,50 @@ export default function SubtournamentDetailView({
   });
 
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
+
+  // Transmisión en vivo autónoma: usa onBroadcastLiveDraw si llega, o transmite directo a Supabase Realtime + DB
+  const effectiveBroadcastLiveDraw = useCallback(
+    async (liveDrawPayload) => {
+      if (typeof onBroadcastLiveDraw === 'function') {
+        return onBroadcastLiveDraw(liveDrawPayload);
+      }
+
+      const tId = subtournament?.tournament_id;
+      if (!isAdmin || !tId) return;
+
+      const nextState = liveDrawPayload?.active ? liveDrawPayload : null;
+
+      if (!fallbackChannelRef.current) {
+        fallbackChannelRef.current = supabase
+          .channel(`live-draw-${tId}`)
+          .subscribe();
+      }
+
+      fallbackChannelRef.current.send({
+        type: 'broadcast',
+        event: 'live_draw_update',
+        payload: { liveDraw: nextState },
+      });
+
+      const { data: tRow } = await supabase
+        .from('tournaments')
+        .select('config')
+        .eq('id', tId)
+        .single();
+
+      if (tRow) {
+        const nextConfig = { ...(tRow.config || {}) };
+        if (nextState) nextConfig.live_draw = nextState;
+        else delete nextConfig.live_draw;
+
+        await supabase
+          .from('tournaments')
+          .update({ config: nextConfig })
+          .eq('id', tId);
+      }
+    },
+    [onBroadcastLiveDraw, isAdmin, subtournament?.tournament_id]
+  );
 
   const formatMeta = getSubtournamentFormatMeta(subtournament.format);
   const currentCategory = getSubtournamentCategory(subtournament);
@@ -1086,7 +1131,7 @@ export default function SubtournamentDetailView({
               saving={savingTeams}
               hasMatchesGenerated={subMatches.length > 0}
               generatingMatches={generating}
-              onBroadcastLiveDraw={onBroadcastLiveDraw}
+              onBroadcastLiveDraw={effectiveBroadcastLiveDraw}
               onOpenPotManager={onOpenPotManager}
               onSaveTeams={handleSaveSubTeams}
               onGenerateMatches={
