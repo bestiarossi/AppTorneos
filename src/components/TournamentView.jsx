@@ -159,10 +159,15 @@ export default function TournamentView({
   const participantAvatarTargetRef = useRef(null);
   const tournamentRef = useRef(null);
   const liveDrawChannelRef = useRef(null);
+  const liveDrawStateRef = useRef(null);
 
   useEffect(() => {
     tournamentRef.current = tournament;
   }, [tournament]);
+
+  useEffect(() => {
+    liveDrawStateRef.current = liveDrawState;
+  }, [liveDrawState]);
 
   const [isEditingTournament, setIsEditingTournament] = useState(false);
   const [editTournamentName, setEditTournamentName] = useState('');
@@ -529,7 +534,7 @@ export default function TournamentView({
     );
   }, [profile]);
 
-  // Canal Realtime Broadcast dedicado para el Sorteo en Vivo (cero configuración extra en Supabase)
+  // Canal Realtime Broadcast dedicado para el Sorteo en Vivo + auto-sincronización (request_sync)
   useEffect(() => {
     if (!supabase || !tournamentId) return;
 
@@ -545,7 +550,24 @@ export default function TournamentView({
           setSpectatorDrawOpen(false);
         }
       })
-      .subscribe();
+      .on('broadcast', { event: 'request_sync' }, () => {
+        if (liveDrawStateRef.current?.active) {
+          liveChannel.send({
+            type: 'broadcast',
+            event: 'live_draw_update',
+            payload: { liveDraw: liveDrawStateRef.current },
+          });
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          liveChannel.send({
+            type: 'broadcast',
+            event: 'request_sync',
+            payload: {},
+          });
+        }
+      });
 
     liveDrawChannelRef.current = liveChannel;
 
@@ -780,30 +802,33 @@ export default function TournamentView({
       const currentT = tournamentRef.current;
       if (!isAdmin || !currentT) return;
 
-      // 1. Estado local inmediato
-      setLiveDrawState(liveDrawPayload?.active ? liveDrawPayload : null);
+      const nextState = liveDrawPayload?.active ? liveDrawPayload : null;
+      setLiveDrawState(nextState);
+      liveDrawStateRef.current = nextState;
 
-      // 2. Broadcast instantáneo por WebSocket a todos los participantes conectados
       liveDrawChannelRef.current?.send({
         type: 'broadcast',
         event: 'live_draw_update',
-        payload: { liveDraw: liveDrawPayload || null },
+        payload: { liveDraw: nextState },
       });
 
-      // 3. Persistencia en tournaments.config para quienes entren a mitad del sorteo
       const nextConfig = { ...(currentT.config || {}) };
-      if (liveDrawPayload) {
-        nextConfig.live_draw = liveDrawPayload;
+      if (nextState) {
+        nextConfig.live_draw = nextState;
       } else {
         delete nextConfig.live_draw;
       }
 
       setTournament((prev) => (prev ? { ...prev, config: nextConfig } : prev));
 
-      await supabase
+      const { error: updErr } = await supabase
         .from('tournaments')
         .update({ config: nextConfig })
         .eq('id', currentT.id);
+
+      if (updErr) {
+        console.error('Error guardando live_draw:', updErr);
+      }
     },
     [isAdmin]
   );
@@ -897,6 +922,7 @@ export default function TournamentView({
       if (updErr) throw updErr;
 
       setLiveDrawState(null);
+      liveDrawStateRef.current = null;
       liveDrawChannelRef.current?.send({
         type: 'broadcast',
         event: 'live_draw_update',
