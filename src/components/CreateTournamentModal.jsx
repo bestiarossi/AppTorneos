@@ -4,11 +4,13 @@ import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
   CheckCircle2,
+  Info,
   Loader2,
   Plus,
   Sparkles,
   Trash2,
   Trophy,
+  User,
   Users,
   X,
 } from 'lucide-react';
@@ -28,6 +30,7 @@ export default function CreateTournamentModal({
   const [name, setName] = useState('');
   const [sport, setSport] = useState('football');
   const [format, setFormat] = useState('league');
+  const [isTeamBased, setIsTeamBased] = useState(false);
   const [homeAndAway, setHomeAndAway] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
   const [rounds, setRounds] = useState('');
@@ -70,6 +73,7 @@ export default function CreateTournamentModal({
     setName('');
     setSport('football');
     setFormat('league');
+    setIsTeamBased(false);
     setHomeAndAway(false);
     setThirdPlace(false);
     setRounds('');
@@ -150,6 +154,7 @@ export default function CreateTournamentModal({
     const base = {
       sport,
       allow_self_join: allowSelfJoin,
+      is_team_based: format === 'custom' ? false : isTeamBased,
     };
 
     if (format === 'league') {
@@ -435,6 +440,52 @@ export default function CreateTournamentModal({
                   })}
                 </div>
               </div>
+
+              {/* Modalidad: Individual vs Por Equipos (para torneos no-custom) */}
+              {format !== 'custom' && (
+                <div>
+                  <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+                    Modalidad de participación
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setIsTeamBased(false)}
+                      className={`flex min-h-[46px] items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition active:scale-[0.99] ${
+                        !isTeamBased
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500/20 dark:border-emerald-400 dark:bg-emerald-500/15 dark:text-emerald-200'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-300'
+                      }`}
+                    >
+                      <User className="h-4 w-4 shrink-0" />
+                      <span>Individual</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setIsTeamBased(true)}
+                      className={`flex min-h-[46px] items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold transition active:scale-[0.99] ${
+                        isTeamBased
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-500/20 dark:border-emerald-400 dark:bg-emerald-500/15 dark:text-emerald-200'
+                          : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-300'
+                      }`}
+                    >
+                      <Users className="h-4 w-4 shrink-0" />
+                      <span>Por Equipos</span>
+                    </button>
+                  </div>
+
+                  <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-sky-200/80 bg-sky-50/70 p-3 text-xs leading-relaxed text-sky-900 dark:border-sky-500/30 dark:bg-sky-500/12 dark:text-sky-200">
+                    <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-600 dark:text-sky-400" />
+                    <span>
+                      {isTeamBased
+                        ? 'En modo Por Equipos, primero anotás a los jugadores individuales y luego dentro del torneo tendrás un apartado dedicado "Equipos" para definir cantidad, usar bombos y hacer sorteo manual, rápido o en vivo.'
+                        : 'Si ya tienen los equipos armados o no les interesa anotar a cada jugador individualmente, pueden usar el modo Individual directamente (anotando cada equipo como un participante).'}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="rounded-2xl border border-slate-200/80 bg-slate-50/75 p-4 dark:border-slate-800 dark:bg-slate-950/50">
                 <h3 className="mb-3 text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">

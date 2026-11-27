@@ -22,6 +22,7 @@ import {
   adaptEntriesToParticipants,
   adaptSubEliminationsToEliminations,
   adaptSubMatchesToMatches,
+  buildDefaultPointsScale,
   generateSubtournamentMatches,
   getPointsForRank,
   getSubtournamentCategory,
@@ -35,6 +36,7 @@ import { buildSubtournamentWhatsAppText } from '../utils/whatsappShare';
 import Avatar from './Avatar';
 import FinalizeSubtournamentModal from './FinalizeSubtournamentModal';
 import MatchResultModal from './MatchResultModal';
+import TeamManagerPanel from './TeamManagerPanel';
 import TournamentMatchesTab from './TournamentMatchesTab';
 import TournamentStandingsTab from './TournamentStandingsTab';
 import WhatsAppShareButton from './WhatsAppShareButton';
@@ -47,17 +49,27 @@ export default function SubtournamentDetailView({
   entryMembers,
   subMatches,
   subEliminations,
+  participants = [],
+  potSets = [],
+  potAssignments = [],
   participantMap,
   existingCategories = [],
   isAdmin,
   currentUserId,
+  onOpenPotManager,
   onBack,
   onRefreshData,
   onSubtournamentDeleted,
 }) {
-  const [innerTab, setInnerTab] = useState(
-    subtournament.format === 'manual' ? 'manual' : 'matches'
-  );
+  const isCompleted = subtournament.status === 'completed';
+  const canEdit = isAdmin && !isCompleted;
+  const isTeamBased = Boolean(subtournament.config?.is_team_based);
+
+  const [innerTab, setInnerTab] = useState(() => {
+    if (isTeamBased && entries.length === 0) return 'teams';
+    return subtournament.format === 'manual' ? 'manual' : 'matches';
+  });
+  const [savingTeams, setSavingTeams] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [mutatingElimination, setMutatingElimination] = useState(false);
   const [reopening, setReopening] = useState(false);
@@ -87,9 +99,6 @@ export default function SubtournamentDetailView({
 
   const [isFinalizeModalOpen, setIsFinalizeModalOpen] = useState(false);
 
-  const isCompleted = subtournament.status === 'completed';
-  const canEdit = isAdmin && !isCompleted;
-  const isTeamBased = Boolean(subtournament.config?.is_team_based);
   const formatMeta = getSubtournamentFormatMeta(subtournament.format);
   const currentCategory = getSubtournamentCategory(subtournament);
   const pointsScale = Array.isArray(subtournament.points_scale)
@@ -103,6 +112,32 @@ export default function SubtournamentDetailView({
     ]);
     return Array.from(set).filter(Boolean);
   }, [existingCategories]);
+
+  // Participantes disponibles para armar/sortear equipos en este subtorneo
+  const eligibleParticipants = useMemo(() => {
+    const selectedIds = subtournament.config?.selected_participant_ids;
+    if (Array.isArray(selectedIds) && selectedIds.length > 0) {
+      const idSet = new Set(selectedIds);
+      const filtered = participants.filter((p) => idSet.has(p.id));
+      if (filtered.length >= 2) return filtered;
+    }
+    return participants;
+  }, [participants, subtournament.config]);
+
+  // Equipos ya guardados en formato para TeamManagerPanel
+  const savedTeams = useMemo(() => {
+    if (!isTeamBased) return [];
+    const membersById = new Map();
+    entryMembers.forEach((em) => {
+      if (!membersById.has(em.entry_id)) membersById.set(em.entry_id, []);
+      membersById.get(em.entry_id).push(em.participant_id);
+    });
+    return entries.map((entry) => ({
+      id: entry.id,
+      name: entry.entry_name,
+      memberIds: membersById.get(entry.id) || [],
+    }));
+  }, [isTeamBased, entries, entryMembers]);
 
   const adaptedEntries = useMemo(() => {
     const base = adaptEntriesToParticipants(
@@ -162,6 +197,95 @@ export default function SubtournamentDetailView({
     });
     return map;
   }, [entryMembers, participantMap]);
+
+  async function handleSaveSubTeams(teamsPayload) {
+    if (!canEdit) return;
+    setActionError('');
+    setSavingTeams(true);
+
+    try {
+      // Limpiar partidos y entradas previas
+      await supabase
+        .from('subtournament_matches')
+        .delete()
+        .eq('subtournament_id', subtournament.id);
+      await supabase
+        .from('subtournament_eliminations')
+        .delete()
+        .eq('subtournament_id', subtournament.id);
+      await supabase
+        .from('subtournament_entries')
+        .delete()
+        .eq('subtournament_id', subtournament.id);
+
+      const entryPayloads = teamsPayload.map((team) => ({
+        subtournament_id: subtournament.id,
+        entry_name: team.name,
+        participant_id: null,
+      }));
+
+      const { data: createdEntries, error: entriesError } = await supabase
+        .from('subtournament_entries')
+        .insert(entryPayloads)
+        .select();
+
+      if (entriesError) throw entriesError;
+
+      const memberPayloads = [];
+      createdEntries.forEach((entry, idx) => {
+        const team = teamsPayload[idx];
+        (team?.memberIds || []).forEach((pId) => {
+          memberPayloads.push({
+            entry_id: entry.id,
+            participant_id: pId,
+          });
+        });
+      });
+
+      if (memberPayloads.length > 0) {
+        const { error: membersError } = await supabase
+          .from('subtournament_entry_members')
+          .insert(memberPayloads);
+
+        if (membersError) throw membersError;
+      }
+
+      // Ajustar escala de puntos a la cantidad real de equipos
+      const nextPointsScale = buildDefaultPointsScale(
+        createdEntries.length,
+        subtournament.points_scale
+      );
+      await supabase
+        .from('subtournaments')
+        .update({ points_scale: nextPointsScale })
+        .eq('id', subtournament.id);
+
+      // Generar partidos automáticamente si corresponde
+      if (
+        subtournament.format === 'league' ||
+        subtournament.format === 'knockout' ||
+        subtournament.format === 'group_stage'
+      ) {
+        const matchPayloads = generateSubtournamentMatches(
+          subtournament,
+          createdEntries
+        );
+        if (matchPayloads.length > 0) {
+          const { error: matchesError } = await supabase
+            .from('subtournament_matches')
+            .insert(matchPayloads);
+
+          if (matchesError) throw matchesError;
+        }
+      }
+
+      await onRefreshData();
+    } catch (err) {
+      setActionError(err?.message || 'No se pudieron guardar los equipos.');
+    } finally {
+      setSavingTeams(false);
+    }
+  }
 
   async function handleSaveCategory(e) {
     e?.preventDefault?.();
@@ -625,8 +749,9 @@ export default function SubtournamentDetailView({
               {!isCompleted ? (
                 <button
                   type="button"
+                  disabled={entries.length === 0}
                   onClick={() => setIsFinalizeModalOpen(true)}
-                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700"
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition hover:bg-emerald-700 disabled:opacity-50"
                 >
                   <Award className="h-4 w-4" />
                   <span>Finalizar Subtorneo y Repartir Puntos</span>
@@ -838,27 +963,6 @@ export default function SubtournamentDetailView({
             </div>
           )}
         </div>
-
-        {isTeamBased && (
-          <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {entries.map((entry) => {
-              const members = membersByEntryId.get(entry.id) || [];
-              return (
-                <div
-                  key={entry.id}
-                  className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs dark:border-slate-800 dark:bg-slate-900/70"
-                >
-                  <p className="font-bold text-slate-900 dark:text-white">
-                    {entry.entry_name}
-                  </p>
-                  <p className="mt-0.5 text-slate-500 dark:text-slate-400">
-                    {members.length > 0 ? members.join(', ') : 'Sin integrantes'}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        )}
       </div>
 
       {isCompleted && (
@@ -906,159 +1010,212 @@ export default function SubtournamentDetailView({
         </div>
       )}
 
-      {/* Selector de Contenido */}
-      {subtournament.format === 'manual' ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      {/* Contenedor con pestañas internas (incluye Equipos si es por equipos) */}
+      <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/70">
+        <div className="flex overflow-x-auto border-b border-slate-200 px-2 pt-1 dark:border-slate-800">
+          {isTeamBased && (
+            <button
+              type="button"
+              onClick={() => setInnerTab('teams')}
+              className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+                innerTab === 'teams'
+                  ? 'border-emerald-600 text-emerald-700 dark:border-[#CCFF00] dark:text-[#CCFF00]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+              <span>Equipos ({entries.length})</span>
+            </button>
+          )}
+
+          {subtournament.format === 'manual' ? (
+            <button
+              type="button"
+              onClick={() => setInnerTab('manual')}
+              className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+                innerTab === 'manual'
+                  ? 'border-emerald-600 text-emerald-700 dark:border-[#CCFF00] dark:text-[#CCFF00]'
+                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
+              }`}
+            >
+              <ListOrdered className="h-4 w-4" />
+              <span>Posiciones manuales</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setInnerTab('matches')}
+                className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+                  innerTab === 'matches'
+                    ? 'border-emerald-600 text-emerald-700 dark:border-[#CCFF00] dark:text-[#CCFF00]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
+                <Swords className="h-4 w-4" />
+                <span>
+                  {subtournament.format === 'last_standing'
+                    ? 'Eliminaciones'
+                    : subtournament.format === 'group_stage'
+                    ? 'Grupos y Cruces'
+                    : 'Cruces / Partidos'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setInnerTab('standings')}
+                className={`inline-flex min-h-[44px] shrink-0 items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
+                  innerTab === 'standings'
+                    ? 'border-emerald-600 text-emerald-700 dark:border-[#CCFF00] dark:text-[#CCFF00]'
+                    : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
+                }`}
+              >
+                <Table2 className="h-4 w-4" />
+                <span>Tabla interna</span>
+              </button>
+            </>
+          )}
+        </div>
+
+        <div className="p-4 sm:p-5">
+          {innerTab === 'teams' && isTeamBased ? (
+            <TeamManagerPanel
+              participants={eligibleParticipants}
+              potSets={potSets}
+              potAssignments={potAssignments}
+              savedTeams={savedTeams}
+              isAdmin={canEdit}
+              saving={savingTeams}
+              hasMatchesGenerated={subMatches.length > 0}
+              generatingMatches={generating}
+              onOpenPotManager={onOpenPotManager}
+              onSaveTeams={handleSaveSubTeams}
+              onGenerateMatches={
+                subtournament.format !== 'manual' &&
+                subtournament.format !== 'last_standing'
+                  ? handleGenerateMatches
+                  : undefined
+              }
+            />
+          ) : innerTab === 'manual' && subtournament.format === 'manual' ? (
             <div>
-              <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
-                <ListOrdered className="h-4 w-4 text-indigo-600" />
-                <span>Posiciones manuales</span>
-              </h3>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                {canEdit
-                  ? 'Asigna el puesto de cada competidor y luego presiona "Finalizar Subtorneo y Repartir Puntos".'
-                  : 'Las posiciones serán confirmadas al finalizar el subtorneo.'}
-              </p>
-            </div>
-          </div>
+              <div className="mb-3">
+                <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                  <ListOrdered className="h-4 w-4 text-indigo-600" />
+                  <span>Posiciones manuales</span>
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {canEdit
+                    ? 'Asigna el puesto de cada competidor y luego presiona "Finalizar Subtorneo y Repartir Puntos".'
+                    : 'Las posiciones serán confirmadas al finalizar el subtorneo.'}
+                </p>
+              </div>
 
-          <div className="space-y-2">
-            {adaptedEntries.map((entry) => {
-              const members = membersByEntryId.get(entry.id) || [];
-              const assignedRank = manualRanks[entry.id] ?? 1;
-              const previewPts = getPointsForRank(pointsScale, assignedRank);
+              {adaptedEntries.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-slate-200 p-6 text-center text-xs text-slate-500">
+                  Primero armá o sorteá los equipos en la pestaña <strong>Equipos</strong>.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {adaptedEntries.map((entry) => {
+                    const members = membersByEntryId.get(entry.id) || [];
+                    const assignedRank = manualRanks[entry.id] ?? 1;
+                    const previewPts = getPointsForRank(pointsScale, assignedRank);
 
-              return (
-                <div
-                  key={entry.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
-                >
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Avatar
-                      name={entry.name}
-                      url={entry.effective_avatar_url}
-                      size="sm"
-                    />
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
-                        {entry.name}
-                      </p>
-                      {isTeamBased && members.length > 0 && (
-                        <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
-                          {members.join(', ')}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-
-                  {canEdit ? (
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={assignedRank}
-                        onChange={(e) => {
-                          const nextRank = Number.parseInt(e.target.value, 10);
-                          setManualRanks((prev) => ({
-                            ...prev,
-                            [entry.id]: nextRank,
-                          }));
-                        }}
-                        className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                    return (
+                      <div
+                        key={entry.id}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/50 px-3.5 py-2.5 dark:border-slate-800 dark:bg-slate-950/40"
                       >
-                        {entries.map((_, idx) => (
-                          <option key={idx + 1} value={idx + 1}>
-                            {idx + 1}.º puesto
-                          </option>
-                        ))}
-                      </select>
-                      <span className="min-w-[60px] text-right text-xs font-bold text-emerald-700 dark:text-emerald-400">
-                        {previewPts} pts
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                      {isCompleted
-                        ? `${entry.final_rank}.º · +${entry.points_awarded} pts`
-                        : 'En juego'}
-                    </span>
-                  )}
+                        <div className="flex min-w-0 items-center gap-2.5">
+                          <Avatar
+                            name={entry.name}
+                            url={entry.effective_avatar_url}
+                            size="sm"
+                          />
+                          <div className="min-w-0">
+                            <p className="truncate text-sm font-bold text-slate-900 dark:text-white">
+                              {entry.name}
+                            </p>
+                            {isTeamBased && members.length > 0 && (
+                              <p className="truncate text-[11px] text-slate-500 dark:text-slate-400">
+                                {members.join(', ')}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {canEdit ? (
+                          <div className="flex items-center gap-2">
+                            <select
+                              value={assignedRank}
+                              onChange={(e) => {
+                                const nextRank = Number.parseInt(e.target.value, 10);
+                                setManualRanks((prev) => ({
+                                  ...prev,
+                                  [entry.id]: nextRank,
+                                }));
+                              }}
+                              className="min-h-[44px] rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-base font-bold text-slate-800 focus:border-emerald-500 focus:outline-none sm:text-xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
+                            >
+                              {entries.map((_, idx) => (
+                                <option key={idx + 1} value={idx + 1}>
+                                  {idx + 1}.º puesto
+                                </option>
+                              ))}
+                            </select>
+                            <span className="min-w-[60px] text-right text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                              {previewPts} pts
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            {isCompleted
+                              ? `${entry.final_rank}.º · +${entry.points_awarded} pts`
+                              : 'En juego'}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              )}
+            </div>
+          ) : innerTab === 'matches' ? (
+            <TournamentMatchesTab
+              tournament={pseudoTournament}
+              participants={adaptedEntries}
+              matches={adaptedMatches}
+              eliminations={adaptedEliminations}
+              isAdmin={canEdit}
+              currentUserId={currentUserId}
+              participantMap={entryMap}
+              generating={generating}
+              mutatingElimination={mutatingElimination}
+              onGenerateMatches={handleGenerateMatches}
+              onOpenMatchModal={(match, siblingLeg) =>
+                setMatchModalState({
+                  isOpen: true,
+                  match,
+                  siblingLeg: siblingLeg || null,
+                })
+              }
+              onEliminateParticipant={handleEliminateEntry}
+              onRevertElimination={handleRevertElimination}
+              onResetAllEliminations={handleResetAllEliminations}
+            />
+          ) : (
+            <TournamentStandingsTab
+              tournament={pseudoTournament}
+              participants={adaptedEntries}
+              matches={adaptedMatches}
+              eliminations={adaptedEliminations}
+              currentUserId={currentUserId}
+            />
+          )}
         </div>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900/70">
-          <div className="flex border-b border-slate-200 px-2 pt-1 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={() => setInnerTab('matches')}
-              className={`inline-flex min-h-[44px] items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
-                innerTab === 'matches'
-                  ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
-              }`}
-            >
-              <Swords className="h-4 w-4" />
-              <span>
-                {subtournament.format === 'last_standing'
-                  ? 'Eliminaciones'
-                  : subtournament.format === 'group_stage'
-                  ? 'Grupos y Cruces'
-                  : 'Cruces / Partidos'}
-              </span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setInnerTab('standings')}
-              className={`inline-flex min-h-[44px] items-center gap-1.5 border-b-2 px-4 py-2.5 text-xs font-bold transition sm:text-sm ${
-                innerTab === 'standings'
-                  ? 'border-emerald-600 text-emerald-700 dark:text-emerald-400'
-                  : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400'
-              }`}
-            >
-              <Table2 className="h-4 w-4" />
-              <span>Tabla interna</span>
-            </button>
-          </div>
-
-          <div className="p-4 sm:p-5">
-            {innerTab === 'matches' ? (
-              <TournamentMatchesTab
-                tournament={pseudoTournament}
-                participants={adaptedEntries}
-                matches={adaptedMatches}
-                eliminations={adaptedEliminations}
-                isAdmin={canEdit}
-                currentUserId={currentUserId}
-                participantMap={entryMap}
-                generating={generating}
-                mutatingElimination={mutatingElimination}
-                onGenerateMatches={handleGenerateMatches}
-                onOpenMatchModal={(match, siblingLeg) =>
-                  setMatchModalState({
-                    isOpen: true,
-                    match,
-                    siblingLeg: siblingLeg || null,
-                  })
-                }
-                onEliminateParticipant={handleEliminateEntry}
-                onRevertElimination={handleRevertElimination}
-                onResetAllEliminations={handleResetAllEliminations}
-              />
-            ) : (
-              <TournamentStandingsTab
-                tournament={pseudoTournament}
-                participants={adaptedEntries}
-                matches={adaptedMatches}
-                eliminations={adaptedEliminations}
-                currentUserId={currentUserId}
-              />
-            )}
-          </div>
-        </div>
-      )}
+      </div>
 
       <MatchResultModal
         isOpen={matchModalState.isOpen}
