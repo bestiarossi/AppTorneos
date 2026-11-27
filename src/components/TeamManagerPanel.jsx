@@ -61,14 +61,21 @@ export default function TeamManagerPanel({
     [participants]
   );
 
+  // Firma estable por contenido para evitar resets al re-renderizar durante el sorteo en vivo
+  const savedTeamsSignature = useMemo(
+    () => JSON.stringify(savedTeams),
+    [savedTeams]
+  );
+
   useEffect(() => {
-    if (savedTeams.length > 0) {
-      const nextTeams = savedTeams.map((t, idx) => ({
+    const parsed = JSON.parse(savedTeamsSignature || '[]');
+    if (parsed.length > 0) {
+      const nextTeams = parsed.map((t, idx) => ({
         id: t.id || `team-${idx + 1}`,
         name: t.name || `Equipo ${idx + 1}`,
       }));
       const nextAssign = {};
-      savedTeams.forEach((t, idx) => {
+      parsed.forEach((t, idx) => {
         const teamId = t.id || `team-${idx + 1}`;
         (t.memberIds || []).forEach((pId) => {
           nextAssign[pId] = teamId;
@@ -80,7 +87,7 @@ export default function TeamManagerPanel({
     } else {
       setIsEditing(true);
     }
-  }, [savedTeams]);
+  }, [savedTeamsSignature]);
 
   const activePotSet = useMemo(
     () => potSets.find((ps) => ps.id === selectedPotSetId) || null,
