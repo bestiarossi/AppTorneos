@@ -72,12 +72,25 @@ export function getRoleMeta(role) {
   };
 }
 
+export function getMeetingsLabel(config = {}) {
+  const meetings = Number.parseInt(config?.meetings_per_pair, 10);
+  if (!Number.isNaN(meetings) && meetings >= 1) {
+    if (meetings === 1) return 'Solo ida';
+    if (meetings === 2) return 'Ida y vuelta';
+    return `${meetings} vueltas`;
+  }
+  return config?.home_and_away ? 'Ida y vuelta' : 'Solo ida';
+}
+
 export function getConfigSummaryItems(format, config = {}) {
   const items = [];
   if (!config || typeof config !== 'object') return items;
 
   if (format === 'league') {
-    items.push(config.home_and_away ? 'Ida y vuelta' : 'Solo ida');
+    items.push(getMeetingsLabel(config));
+    if (config.league_tiebreaker) {
+      items.push('Desempate 3/2/1');
+    }
     if (config.rounds) {
       items.push(`${config.rounds} ${config.rounds === 1 ? 'jornada' : 'jornadas'}`);
     }
@@ -105,7 +118,15 @@ export function getConfigSummaryItems(format, config = {}) {
         `+${thirds} mejor${thirds === 1 ? '' : 'es'} ${direct + playoff + 1}.º`
       );
     }
-    items.push(config.group_home_and_away ? 'Grupos ida/vuelta' : 'Grupos solo ida');
+    const groupMeetings = Number.parseInt(config.group_meetings_per_pair, 10);
+    if (!Number.isNaN(groupMeetings) && groupMeetings > 2) {
+      items.push(`Grupos ${groupMeetings} vueltas`);
+    } else {
+      items.push(config.group_home_and_away ? 'Grupos ida/vuelta' : 'Grupos solo ida');
+    }
+    if (config.league_tiebreaker) {
+      items.push('Desempate 3/2/1');
+    }
     if (config.third_place) {
       items.push('Con 3.º puesto');
     }

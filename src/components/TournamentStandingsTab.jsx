@@ -120,6 +120,7 @@ export default function TournamentStandingsTab({
   badgesMap = null,
 }) {
   const format = tournament?.format || 'league';
+  const hasLeagueTiebreaker = Boolean(tournament?.config?.league_tiebreaker);
 
   const leagueStandings = useMemo(() => {
     if (format !== 'league') return [];
@@ -140,37 +141,56 @@ export default function TournamentStandingsTab({
     });
 
     matches.forEach((m) => {
-      if (m.status !== 'completed') return;
+      if (m.status !== 'completed' || m.is_bye) return;
       if (!m.participant_a_id || !m.participant_b_id) return;
 
       const rowA = statsMap.get(m.participant_a_id);
       const rowB = statsMap.get(m.participant_b_id);
       if (!rowA || !rowB) return;
 
-      const scoreA = Number(m.score_a) || 0;
-      const scoreB = Number(m.score_b) || 0;
+      const hasScores = m.score_a !== null && m.score_b !== null;
+      const scoreA = hasScores ? Number(m.score_a) || 0 : 0;
+      const scoreB = hasScores ? Number(m.score_b) || 0 : 0;
 
       rowA.played += 1;
       rowB.played += 1;
 
-      rowA.goalsFor += scoreA;
-      rowA.goalsAgainst += scoreB;
-      rowB.goalsFor += scoreB;
-      rowB.goalsAgainst += scoreA;
+      if (hasScores) {
+        rowA.goalsFor += scoreA;
+        rowA.goalsAgainst += scoreB;
+        rowB.goalsFor += scoreB;
+        rowB.goalsAgainst += scoreA;
+      }
 
-      if (scoreA > scoreB || m.winner_id === m.participant_a_id) {
+      const isDrawResult = Boolean(m.is_draw) || (hasScores && scoreA === scoreB);
+
+      if (isDrawResult) {
+        rowA.drawn += 1;
+        rowB.drawn += 1;
+        if (m.winner_id === m.participant_a_id) {
+          rowA.points += 2;
+          rowB.points += 1;
+        } else if (m.winner_id === m.participant_b_id) {
+          rowB.points += 2;
+          rowA.points += 1;
+        } else {
+          rowA.points += 1;
+          rowB.points += 1;
+        }
+      } else if (
+        (hasScores && scoreA > scoreB) ||
+        m.winner_id === m.participant_a_id
+      ) {
         rowA.won += 1;
         rowA.points += 3;
         rowB.lost += 1;
-      } else if (scoreB > scoreA || m.winner_id === m.participant_b_id) {
+      } else if (
+        (hasScores && scoreB > scoreA) ||
+        m.winner_id === m.participant_b_id
+      ) {
         rowB.won += 1;
         rowB.points += 3;
         rowA.lost += 1;
-      } else {
-        rowA.drawn += 1;
-        rowB.drawn += 1;
-        rowA.points += 1;
-        rowB.points += 1;
       }
     });
 
@@ -473,7 +493,9 @@ export default function TournamentStandingsTab({
         </h3>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {format === 'league'
-            ? '3 pts por victoria · 1 pt por empate · Desempate por diferencia y goles a favor.'
+            ? hasLeagueTiebreaker
+              ? '3 pts victoria · 2 pts ganar en desempate · 1 pt perder en desempate.'
+              : '3 pts por victoria · 1 pt por empate · Desempate por diferencia y goles a favor.'
             : format === 'knockout'
             ? 'Clasificación según avance y resultados en las llaves eliminatorias.'
             : 'Orden de supervivencia según las eliminaciones registradas.'}
