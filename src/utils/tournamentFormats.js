@@ -11,6 +11,14 @@ export const TOURNAMENT_FORMATS = {
     description: 'Cruces directos de eliminación hasta la final.',
     badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
   },
+  group_stage: {
+    value: 'group_stage',
+    label: 'Grupos + Eliminación',
+    description:
+      'Fase de grupos configurable (directos, playoff y mejores terceros) hacia llaves finales.',
+    badgeClass:
+      'bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-500/15 dark:text-cyan-300 dark:border-cyan-500/35',
+  },
   last_standing: {
     value: 'last_standing',
     label: 'Último en pie',
@@ -75,6 +83,29 @@ export function getConfigSummaryItems(format, config = {}) {
     }
   } else if (format === 'knockout') {
     items.push(config.home_and_away ? 'Cruces ida y vuelta' : 'Partido único');
+    if (config.third_place) {
+      items.push('Con 3.º puesto');
+    }
+  } else if (format === 'group_stage') {
+    const gc = Number.parseInt(config.group_count || 2, 10);
+    const direct = Number.parseInt(config.direct_per_group ?? 2, 10);
+    const playoff = Number.parseInt(config.playoff_per_group ?? 0, 10);
+    const thirds = Number.parseInt(config.best_thirds_count ?? 0, 10);
+
+    items.push(`${gc} ${gc === 1 ? 'grupo' : 'grupos'}`);
+    if (direct > 0 && playoff > 0) {
+      items.push(`${direct} dir. + ${playoff} playoff / grupo`);
+    } else if (direct > 0) {
+      items.push(`${direct} directo${direct === 1 ? '' : 's'} / grupo`);
+    } else if (playoff > 0) {
+      items.push(`${playoff} a playoff / grupo`);
+    }
+    if (thirds > 0) {
+      items.push(
+        `+${thirds} mejor${thirds === 1 ? '' : 'es'} ${direct + playoff + 1}.º`
+      );
+    }
+    items.push(config.group_home_and_away ? 'Grupos ida/vuelta' : 'Grupos solo ida');
     if (config.third_place) {
       items.push('Con 3.º puesto');
     }

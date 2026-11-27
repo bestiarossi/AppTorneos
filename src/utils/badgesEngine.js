@@ -2,6 +2,7 @@ import { computeCustomGeneralStandings } from './customTournamentEngine';
 import { computeProdeLeaderboard } from './predictionsEngine';
 import { computeTournamentSummary } from './statsEngine';
 import {
+  computeGroupStageStandings,
   computeKnockoutSummary,
   computeLastStandingStandings,
   computeLeagueStandings,
@@ -73,6 +74,12 @@ export function computeTournamentBadges({
     const ko = computeKnockoutSummary(participants, matches);
     if (ko.champion) {
       leaderId = ko.champion.id;
+      isChampion = true;
+    }
+  } else if (tournament.format === 'group_stage') {
+    const gs = computeGroupStageStandings(tournament, participants, matches);
+    if (gs.knockoutSummary.champion) {
+      leaderId = gs.knockoutSummary.champion.id;
       isChampion = true;
     }
   } else if (tournament.format === 'last_standing') {

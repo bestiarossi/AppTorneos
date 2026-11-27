@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
 import {
+  computeGroupStageStandings,
   computeKnockoutSummary,
   computeLastStandingStandings,
   getKnockoutSeriesStatus,
@@ -23,6 +24,7 @@ import {
 } from '../utils/tournamentEngine';
 import { resolveMatchOutcome } from '../utils/tournamentStatsEngine';
 import Avatar from './Avatar';
+import GroupStageBuilder from './GroupStageBuilder';
 
 function FormMiniDots({ outcomes = [], align = 'left' }) {
   if (!outcomes || outcomes.length === 0) return null;
@@ -111,6 +113,8 @@ export default function TournamentMatchesTab({
   generating,
   mutatingElimination,
   onGenerateMatches,
+  onGenerateGroupStage = null,
+  onResetGroupStageMatches = null,
   onOpenMatchModal,
   onEliminateParticipant,
   onRevertElimination,
@@ -123,8 +127,9 @@ export default function TournamentMatchesTab({
   const [confirmResetEliminations, setConfirmResetEliminations] =
     useState(false);
   const [leagueFilter, setLeagueFilter] = useState('all');
+  const [groupStageView, setGroupStageView] = useState('groups'); // 'groups' | 'playoff' | 'knockout'
+  const [selectedGroupFilter, setSelectedGroupFilter] = useState('all');
 
-  // Racha reciente G-E-P de cada participante
   const recentFormMap = useMemo(() => {
     const map = new Map();
     const ordered = [...(matches || [])]
@@ -166,7 +171,6 @@ export default function TournamentMatchesTab({
     return trimmed;
   }, [matches]);
 
-  // Mapa de encuestas Prode por match_id o subtournament_match_id
   const pollByMatchId = useMemo(() => {
     const map = new Map();
     if (!prodePolls || prodePolls.length === 0) return map;
@@ -226,6 +230,722 @@ export default function TournamentMatchesTab({
     await onGenerateMatches();
   }
 
+  function renderLeagueMatchItem(m) {
+    const pA = participantMap.get(m.participant_a_id);
+    const pB = participantMap.get(m.participant_b_id);
+    const isCompleted = m.status === 'completed';
+    const hasScores = m.score_a !== null && m.score_b !== null;
+    const winnerId = getSingleMatchWinner(m);
+    const isDraw =
+      isCompleted && (m.is_draw || (hasScores && m.score_a === m.score_b));
+    const canEdit = isAdmin && pA && pB;
+    const pollInfo = pollByMatchId.get(m.id) || null;
+    const formA = recentFormMap.get(m.participant_a_id) || [];
+    const formB = recentFormMap.get(m.participant_b_id) || [];
+
+    if (pollInfo) {
+      const isPollOpen = pollInfo.poll.status === 'open' && !isCompleted;
+
+      return (
+        <div
+          key={m.id}
+          className="bg-gradient-to-b from-emerald-50/35 via-white/50 to-transparent p-3.5 sm:p-4 dark:from-emerald-500/8 dark:via-slate-900/40"
+        >
+          <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
+                  isPollOpen
+                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
+                    : 'bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                {isPollOpen && (
+                  <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+                )}
+                <Target className="h-3 w-3" />
+                <span>{isPollOpen ? 'Prode activo' : 'Prode cerrado'}</span>
+              </span>
+              <span className="text-[11px] font-semibold text-slate-500 tabular-nums dark:text-slate-400">
+                {pollInfo.votesCount} {pollInfo.votesCount === 1 ? 'voto' : 'votos'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {onOpenProde && isPollOpen && (
+                <button
+                  type="button"
+                  onClick={onOpenProde}
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300"
+                >
+                  <span>Votar en Prode</span>
+                </button>
+              )}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => onOpenMatchModal(m, null)}
+                  className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">
+                    {isCompleted ? 'Editar' : 'Resultado'}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
+            <div className="flex min-w-0 items-center justify-end gap-2.5">
+              <div className="min-w-0 text-right">
+                <p
+                  className={`truncate text-xs sm:text-sm ${
+                    winnerId === m.participant_a_id
+                      ? 'font-black text-emerald-700 dark:text-emerald-400'
+                      : 'font-bold text-slate-900 dark:text-white'
+                  }`}
+                >
+                  {pA?.name || 'Por definir'}
+                </p>
+                <FormMiniDots outcomes={formA} align="right" />
+              </div>
+              <Avatar
+                name={pA?.name || '?'}
+                url={resolveParticipantAvatar(pA)}
+                size="md"
+                highlight={winnerId === m.participant_a_id}
+              />
+            </div>
+
+            <div className="flex min-w-[74px] justify-center sm:min-w-[88px]">
+              {!isCompleted ? (
+                <span className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 shadow-2xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>VS</span>
+                </span>
+              ) : hasScores ? (
+                <span className="rounded-xl bg-slate-900 px-3 py-1.5 font-mono text-sm font-black text-white shadow-xs tabular-nums dark:border dark:border-emerald-500/35 dark:bg-emerald-500/20 dark:text-emerald-200">
+                  {m.score_a} - {m.score_b}
+                </span>
+              ) : isDraw ? (
+                <span className="rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
+                  Empate
+                </span>
+              ) : (
+                <span className="rounded-xl bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                  {winnerId === m.participant_a_id ? 'G - P' : 'P - G'}
+                </span>
+              )}
+            </div>
+
+            <div className="flex min-w-0 items-center justify-start gap-2.5">
+              <Avatar
+                name={pB?.name || '?'}
+                url={resolveParticipantAvatar(pB)}
+                size="md"
+                highlight={winnerId === m.participant_b_id}
+              />
+              <div className="min-w-0 text-left">
+                <p
+                  className={`truncate text-xs sm:text-sm ${
+                    winnerId === m.participant_b_id
+                      ? 'font-black text-emerald-700 dark:text-emerald-400'
+                      : 'font-bold text-slate-900 dark:text-white'
+                  }`}
+                >
+                  {pB?.name || 'Por definir'}
+                </p>
+                <FormMiniDots outcomes={formB} align="left" />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/75 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/45">
+            <ProdeTrendBar
+              trend={pollInfo.trend}
+              nameA={pA?.name || 'A'}
+              nameB={pB?.name || 'B'}
+            />
+          </div>
+        </div>
+      );
+    }
+
+    const RowTag = canEdit ? motion.button : motion.div;
+
+    return (
+      <RowTag
+        key={m.id}
+        {...(canEdit
+          ? {
+              type: 'button',
+              whileTap: { scale: 0.995 },
+              onClick: () => onOpenMatchModal(m, null),
+            }
+          : {})}
+        className={`flex min-h-[54px] w-full items-center justify-between gap-2 px-3 py-3 text-left transition-colors sm:gap-3 sm:px-4 ${
+          canEdit
+            ? 'cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10'
+            : ''
+        }`}
+      >
+        <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
+          <div className="flex min-w-0 items-center justify-end gap-2">
+            <div className="min-w-0 text-right">
+              <span
+                className={`block truncate text-xs sm:text-sm ${
+                  winnerId === m.participant_a_id
+                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                    : isDraw
+                    ? 'font-semibold text-slate-700 dark:text-slate-300'
+                    : 'font-medium text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                {pA?.name || 'Por definir'}
+              </span>
+              {formA.length > 0 && (
+                <div className="hidden sm:block">
+                  <FormMiniDots outcomes={formA} align="right" />
+                </div>
+              )}
+            </div>
+            <Avatar
+              name={pA?.name || '?'}
+              url={resolveParticipantAvatar(pA)}
+              size="xs"
+              className="hidden sm:inline-flex"
+            />
+          </div>
+
+          <div className="flex min-w-[68px] justify-center sm:min-w-[78px]">
+            {!isCompleted ? (
+              <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                <Clock className="h-3 w-3" />
+                <span>vs</span>
+              </span>
+            ) : hasScores ? (
+              <span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-2xs tabular-nums dark:border dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200">
+                {m.score_a} - {m.score_b}
+              </span>
+            ) : isDraw ? (
+              <span className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
+                Empate
+              </span>
+            ) : (
+              <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                {winnerId === m.participant_a_id ? 'G - P' : 'P - G'}
+              </span>
+            )}
+          </div>
+
+          <div className="flex min-w-0 items-center justify-start gap-2">
+            <Avatar
+              name={pB?.name || '?'}
+              url={resolveParticipantAvatar(pB)}
+              size="xs"
+              className="hidden sm:inline-flex"
+            />
+            <div className="min-w-0 text-left">
+              <span
+                className={`block truncate text-xs sm:text-sm ${
+                  winnerId === m.participant_b_id
+                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                    : isDraw
+                    ? 'font-semibold text-slate-700 dark:text-slate-300'
+                    : 'font-medium text-slate-800 dark:text-slate-200'
+                }`}
+              >
+                {pB?.name || 'Por definir'}
+              </span>
+              {formB.length > 0 && (
+                <div className="hidden sm:block">
+                  <FormMiniDots outcomes={formB} align="left" />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {canEdit && (
+          <span className="shrink-0 rounded-lg p-1 text-slate-400">
+            <Pencil className="h-3.5 w-3.5" />
+          </span>
+        )}
+      </RowTag>
+    );
+  }
+
+  function renderKnockoutBracketBlock(koMatchesSubset) {
+    const koSummary = computeKnockoutSummary(participants, koMatchesSubset);
+    const roundsMap = new Map();
+    let thirdPlaceMatch = null;
+
+    koMatchesSubset.forEach((m) => {
+      if (m.round_name === 'Tercer puesto') {
+        thirdPlaceMatch = m;
+        return;
+      }
+      if (!roundsMap.has(m.round_number)) {
+        roundsMap.set(m.round_number, {
+          roundNumber: m.round_number,
+          roundName: m.round_name,
+          tiesMap: new Map(),
+        });
+      }
+      const roundBucket = roundsMap.get(m.round_number);
+      if (!roundBucket.tiesMap.has(m.match_order)) {
+        roundBucket.tiesMap.set(m.match_order, []);
+      }
+      roundBucket.tiesMap.get(m.match_order).push(m);
+    });
+
+    const knockoutRounds = Array.from(roundsMap.values())
+      .sort((a, b) => a.roundNumber - b.roundNumber)
+      .map((round) => ({
+        roundNumber: round.roundNumber,
+        roundName: round.roundName,
+        ties: Array.from(round.tiesMap.entries())
+          .sort((a, b) => a[0] - b[0])
+          .map(([matchOrder, tieMatches]) => ({
+            matchOrder,
+            tieMatches: [...tieMatches].sort((a, b) => a.leg - b.leg),
+          })),
+      }));
+
+    return (
+      <div>
+        {koSummary.champion && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="podium-gold mb-5 flex items-center gap-3.5 rounded-2xl border p-4"
+          >
+            <Avatar
+              name={koSummary.champion.name}
+              url={resolveParticipantAvatar(koSummary.champion)}
+              size="lg"
+              highlight
+            />
+            <div>
+              <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
+                <Crown className="h-3.5 w-3.5" />
+                <span>¡Campeón de la Eliminatoria!</span>
+              </span>
+              <p className="text-lg font-black text-slate-900 dark:text-white">
+                {koSummary.champion.name}
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="flex gap-4 overflow-x-auto pb-3">
+          {knockoutRounds.map((round, roundIdx) => (
+            <motion.div
+              key={round.roundNumber}
+              initial={{ opacity: 0, x: 14 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{
+                duration: 0.25,
+                delay: Math.min(roundIdx * 0.06, 0.3),
+              }}
+              className="flex min-w-[285px] flex-1 flex-col gap-3"
+            >
+              <div className="rounded-xl border border-slate-200/80 bg-slate-100/85 px-3.5 py-2 text-center backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/90">
+                <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
+                  {round.roundName}
+                </h3>
+              </div>
+
+              <div className="flex flex-1 flex-col justify-around gap-3">
+                {round.ties.map(({ matchOrder, tieMatches }) => {
+                  const series = getKnockoutSeriesStatus(tieMatches);
+                  const leg1 = tieMatches[0];
+                  const leg2 = tieMatches[1] || null;
+                  const player1 = participantMap.get(series.player1Id);
+                  const player2 = participantMap.get(series.player2Id);
+
+                  if (series.isBye) {
+                    return (
+                      <div
+                        key={matchOrder}
+                        className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/45"
+                      >
+                        <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-slate-400">
+                          <span>Llave {matchOrder}</span>
+                          <span className="rounded bg-slate-200/70 px-1.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                            Pase libre (BYE)
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Avatar
+                            name={player1?.name || 'Por definir'}
+                            url={resolveParticipantAvatar(player1)}
+                            size="xs"
+                          />
+                          <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                            {player1?.name || 'Por definir'}
+                          </p>
+                        </div>
+                        <p className="mt-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
+                          Avanza automáticamente
+                        </p>
+                      </div>
+                    );
+                  }
+
+                  const isSingleLeg = !leg2;
+                  const leg1Poll = pollByMatchId.get(leg1.id) || null;
+
+                  if (isSingleLeg) {
+                    const canEdit =
+                      isAdmin &&
+                      Boolean(leg1.participant_a_id && leg1.participant_b_id);
+                    const hasScores =
+                      leg1.score_a !== null && leg1.score_b !== null;
+                    const CardTag = canEdit ? motion.button : motion.div;
+
+                    return (
+                      <div
+                        key={matchOrder}
+                        className={`rounded-2xl border bg-white/85 p-3 backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
+                          series.isCompleted
+                            ? 'border-emerald-300/80 dark:border-emerald-500/35'
+                            : leg1Poll
+                            ? 'border-emerald-300/90 dark:border-emerald-500/40'
+                            : 'border-slate-200/80 dark:border-slate-800'
+                        }`}
+                      >
+                        <CardTag
+                          {...(canEdit
+                            ? {
+                                type: 'button',
+                                whileTap: { scale: 0.985 },
+                                onClick: () => onOpenMatchModal(leg1, null),
+                              }
+                            : {})}
+                          className={`min-h-[44px] w-full text-left ${
+                            canEdit ? 'cursor-pointer' : ''
+                          }`}
+                        >
+                          <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
+                            <span className="font-semibold">Llave {matchOrder}</span>
+                            <div className="flex items-center gap-1.5">
+                              {leg1Poll && (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
+                                  <Target className="h-2.5 w-2.5" />
+                                  <span>Prode</span>
+                                </span>
+                              )}
+                              {canEdit && <Pencil className="h-3 w-3" />}
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            <div
+                              className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
+                                series.winnerId === leg1.participant_a_id
+                                  ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                                  : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Avatar
+                                  name={player1?.name || '?'}
+                                  url={resolveParticipantAvatar(player1)}
+                                  size="xs"
+                                />
+                                <span className="truncate">
+                                  {player1?.name || 'Por definir'}
+                                </span>
+                              </div>
+                              <span className="ml-2 font-mono text-xs font-bold tabular-nums">
+                                {hasScores
+                                  ? leg1.score_a
+                                  : series.winnerId === leg1.participant_a_id
+                                  ? 'G'
+                                  : ''}
+                              </span>
+                            </div>
+
+                            <div
+                              className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
+                                series.winnerId === leg1.participant_b_id
+                                  ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                                  : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                              }`}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Avatar
+                                  name={player2?.name || '?'}
+                                  url={resolveParticipantAvatar(player2)}
+                                  size="xs"
+                                />
+                                <span className="truncate">
+                                  {player2?.name || 'Por definir'}
+                                </span>
+                              </div>
+                              <span className="ml-2 font-mono text-xs font-bold tabular-nums">
+                                {hasScores
+                                  ? leg1.score_b
+                                  : series.winnerId === leg1.participant_b_id
+                                  ? 'G'
+                                  : ''}
+                              </span>
+                            </div>
+                          </div>
+
+                          {series.resolvedByTiebreak && (
+                            <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                              Avanza por desempate:{' '}
+                              {participantMap.get(series.winnerId)?.name}
+                            </p>
+                          )}
+                        </CardTag>
+
+                        {leg1Poll && (
+                          <div className="mt-2.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+                            <ProdeTrendBar
+                              compact
+                              trend={leg1Poll.trend}
+                              nameA={player1?.name || 'A'}
+                              nameB={player2?.name || 'B'}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  const bothPlayersReady = Boolean(
+                    leg1.participant_a_id && leg1.participant_b_id
+                  );
+
+                  return (
+                    <div
+                      key={matchOrder}
+                      className={`rounded-2xl border bg-white/85 p-3 backdrop-blur-sm dark:bg-slate-900/75 ${
+                        series.isCompleted
+                          ? 'border-emerald-300/80 dark:border-emerald-500/35'
+                          : 'border-slate-200/80 dark:border-slate-800'
+                      }`}
+                    >
+                      <div className="mb-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                        <span className="font-semibold">Llave {matchOrder}</span>
+                        {series.hasAggregate && (
+                          <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 tabular-nums dark:bg-slate-800 dark:text-slate-200">
+                            Global: {series.agg1} - {series.agg2}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="mb-2.5 space-y-1">
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
+                            series.winnerId === series.player1Id
+                              ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                              : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <Avatar
+                              name={player1?.name || '?'}
+                              url={resolveParticipantAvatar(player1)}
+                              size="xs"
+                            />
+                            <span className="truncate">
+                              {player1?.name || 'Por definir'}
+                            </span>
+                          </div>
+                          {series.winnerId === series.player1Id && (
+                            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                              Avanza
+                            </span>
+                          )}
+                        </div>
+
+                        <div
+                          className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
+                            series.winnerId === series.player2Id
+                              ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
+                              : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex min-w-0 items-center gap-1.5">
+                            <Avatar
+                              name={player2?.name || '?'}
+                              url={resolveParticipantAvatar(player2)}
+                              size="xs"
+                            />
+                            <span className="truncate">
+                              {player2?.name || 'Por definir'}
+                            </span>
+                          </div>
+                          {series.winnerId === series.player2Id && (
+                            <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
+                              Avanza
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
+                        {[leg1, leg2].map((legMatch) => {
+                          const sibling = legMatch.leg === 1 ? leg2 : leg1;
+                          const canEditLeg = isAdmin && bothPlayersReady;
+                          const LegTag = canEditLeg ? motion.button : motion.div;
+                          const legHasScores =
+                            legMatch.score_a !== null && legMatch.score_b !== null;
+                          const legWinner = getSingleMatchWinner(legMatch);
+                          const legPoll = pollByMatchId.get(legMatch.id);
+
+                          return (
+                            <LegTag
+                              key={legMatch.id}
+                              {...(canEditLeg
+                                ? {
+                                    type: 'button',
+                                    whileTap: { scale: 0.985 },
+                                    onClick: () =>
+                                      onOpenMatchModal(legMatch, sibling),
+                                  }
+                                : {})}
+                              className={`flex min-h-[44px] w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-2.5 py-1.5 text-[11px] transition-colors dark:border-slate-800 dark:bg-slate-950/50 ${
+                                canEditLeg
+                                  ? 'cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10'
+                                  : ''
+                              }`}
+                            >
+                              <span className="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
+                                <span>{legMatch.leg === 1 ? 'Ida' : 'Vuelta'}</span>
+                                {legPoll && (
+                                  <Target className="h-3 w-3 text-emerald-500" />
+                                )}
+                              </span>
+                              <span className="font-mono font-bold text-slate-800 tabular-nums dark:text-slate-100">
+                                {legMatch.status === 'pending'
+                                  ? 'Pendiente'
+                                  : legHasScores
+                                  ? `${legMatch.score_a} - ${legMatch.score_b}`
+                                  : legWinner
+                                  ? `Ganó ${
+                                      participantMap.get(legWinner)?.name || ''
+                                    }`
+                                  : 'Cargado'}
+                              </span>
+                            </LegTag>
+                          );
+                        })}
+                      </div>
+
+                      {series.resolvedByTiebreak && (
+                        <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
+                          Desempate: {participantMap.get(series.winnerId)?.name}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </motion.div>
+          ))}
+        </div>
+
+        {thirdPlaceMatch && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24 }}
+            className="podium-bronze mt-5 rounded-2xl border p-4"
+          >
+            <div className="mb-2.5 flex items-center justify-between">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-orange-800 dark:text-orange-200">
+                Partido por el 3.º puesto
+              </h4>
+              {isAdmin &&
+                thirdPlaceMatch.participant_a_id &&
+                thirdPlaceMatch.participant_b_id && (
+                  <motion.button
+                    type="button"
+                    whileTap={{ scale: 0.96 }}
+                    onClick={() => onOpenMatchModal(thirdPlaceMatch, null)}
+                    className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-orange-300/80 bg-white/90 px-3 py-1.5 text-xs font-semibold text-orange-800 transition hover:bg-orange-100/70 dark:border-orange-500/35 dark:bg-slate-900/90 dark:text-orange-200 dark:hover:bg-orange-500/20"
+                  >
+                    <Pencil className="h-3 w-3" />
+                    <span>
+                      {thirdPlaceMatch.status === 'completed'
+                        ? 'Editar'
+                        : 'Cargar resultado'}
+                    </span>
+                  </motion.button>
+                )}
+            </div>
+
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-orange-200/80 bg-white/90 px-4 py-3 text-sm dark:border-orange-500/25 dark:bg-slate-900/85">
+              <div className="flex min-w-0 items-center justify-end gap-2">
+                <span
+                  className={`truncate text-right ${
+                    getSingleMatchWinner(thirdPlaceMatch) ===
+                    thirdPlaceMatch.participant_a_id
+                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                      : 'font-semibold text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  {participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
+                    'Perdedor Semifinal 1'}
+                </span>
+                <Avatar
+                  name={
+                    participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
+                    '?'
+                  }
+                  url={resolveParticipantAvatar(
+                    participantMap.get(thirdPlaceMatch.participant_a_id)
+                  )}
+                  size="xs"
+                />
+              </div>
+
+              <span className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-800 tabular-nums dark:bg-slate-800 dark:text-slate-100">
+                {thirdPlaceMatch.status === 'completed'
+                  ? thirdPlaceMatch.score_a !== null &&
+                    thirdPlaceMatch.score_b !== null
+                    ? `${thirdPlaceMatch.score_a} - ${thirdPlaceMatch.score_b}`
+                    : 'Definido'
+                  : 'vs'}
+              </span>
+
+              <div className="flex min-w-0 items-center justify-start gap-2">
+                <Avatar
+                  name={
+                    participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
+                    '?'
+                  }
+                  url={resolveParticipantAvatar(
+                    participantMap.get(thirdPlaceMatch.participant_b_id)
+                  )}
+                  size="xs"
+                />
+                <span
+                  className={`truncate text-left ${
+                    getSingleMatchWinner(thirdPlaceMatch) ===
+                    thirdPlaceMatch.participant_b_id
+                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
+                      : 'font-semibold text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  {participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
+                    'Perdedor Semifinal 2'}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </div>
+    );
+  }
+
+  // FORMATO: ÚLTIMO EN PIE
   if (tournament.format === 'last_standing') {
     const ls = computeLastStandingStandings(participants, eliminations);
     const canEliminateMore =
@@ -470,6 +1190,237 @@ export default function TournamentMatchesTab({
     );
   }
 
+  // FORMATO: FASE DE GRUPOS Y ELIMINACIÓN (group_stage)
+  if (tournament.format === 'group_stage') {
+    if (matches.length === 0) {
+      return (
+        <GroupStageBuilder
+          tournament={tournament}
+          participants={participants}
+          isAdmin={isAdmin}
+          generating={generating}
+          onGenerateGroupStage={onGenerateGroupStage}
+        />
+      );
+    }
+
+    const groupData = computeGroupStageStandings(
+      tournament,
+      participants,
+      matches
+    );
+    const hasPlayoff = groupData.playoffMatches.length > 0;
+    const regularAll = matches.filter((m) => !m.is_bye);
+    const completedAll = regularAll.filter((m) => m.status === 'completed');
+    const progressPct =
+      regularAll.length > 0
+        ? Math.round((completedAll.length / regularAll.length) * 100)
+        : 0;
+
+    return (
+      <div className="space-y-5">
+        {/* Barra progreso + botón reconfigurar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200/80 bg-slate-50/75 px-4 py-3 dark:border-slate-800 dark:bg-slate-900/60">
+          <div className="flex flex-1 flex-col gap-1.5 sm:max-w-xs">
+            <div className="flex items-center justify-between gap-2 text-xs font-semibold text-slate-600 tabular-nums dark:text-slate-300">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                <span>
+                  {completedAll.length} de {regularAll.length} partidos jugados
+                </span>
+              </span>
+              <span className="font-bold text-emerald-700 dark:text-emerald-300">
+                {progressPct}%
+              </span>
+            </div>
+            <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-200/80 dark:bg-slate-800">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-300"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+          </div>
+
+          {isAdmin && (
+            <div>
+              <AnimatePresence mode="wait">
+                {!confirmRegenerate ? (
+                  <button
+                    type="button"
+                    disabled={generating}
+                    onClick={() => setConfirmRegenerate(true)}
+                    className="inline-flex min-h-[44px] items-center gap-1.5 rounded-xl border border-slate-200/90 bg-white px-3.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Reconfigurar grupos</span>
+                  </button>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs dark:border-amber-500/30 dark:bg-amber-500/15">
+                    <span className="font-semibold text-amber-900 dark:text-amber-200">
+                      Se borrarán los partidos actuales. ¿Continuar?
+                    </span>
+                    <button
+                      type="button"
+                      disabled={generating}
+                      onClick={async () => {
+                        setConfirmRegenerate(false);
+                        if (onResetGroupStageMatches) {
+                          await onResetGroupStageMatches();
+                        }
+                      }}
+                      className="min-h-[44px] rounded-lg bg-amber-600 px-3 py-1 font-semibold text-white"
+                    >
+                      Sí, reconfigurar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmRegenerate(false)}
+                      className="min-h-[44px] rounded-lg bg-white px-3 py-1 font-semibold text-slate-700"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          )}
+        </div>
+
+        {/* Selector de Fase */}
+        <div className="inline-flex flex-wrap gap-1.5 rounded-2xl border border-slate-200/80 bg-slate-100/80 p-1 dark:border-slate-800 dark:bg-slate-950/70">
+          <button
+            type="button"
+            onClick={() => setGroupStageView('groups')}
+            className={`min-h-[44px] rounded-xl px-4 py-2 text-xs font-bold transition ${
+              groupStageView === 'groups'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            Fase de Grupos
+          </button>
+
+          {hasPlayoff && (
+            <button
+              type="button"
+              onClick={() => setGroupStageView('playoff')}
+              className={`min-h-[44px] rounded-xl px-4 py-2 text-xs font-bold transition ${
+                groupStageView === 'playoff'
+                  ? 'bg-amber-600 text-white shadow-xs'
+                  : 'text-slate-600 dark:text-slate-400'
+              }`}
+            >
+              Playoff
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setGroupStageView('knockout')}
+            className={`min-h-[44px] rounded-xl px-4 py-2 text-xs font-bold transition ${
+              groupStageView === 'knockout'
+                ? 'bg-indigo-600 text-white shadow-xs'
+                : 'text-slate-600 dark:text-slate-400'
+            }`}
+          >
+            Eliminatoria Final
+          </button>
+        </div>
+
+        {groupStageView === 'groups' && (
+          <div className="space-y-4">
+            {/* Filtro de grupo */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setSelectedGroupFilter('all')}
+                className={`min-h-[38px] rounded-xl border px-3 py-1 text-xs font-bold transition ${
+                  selectedGroupFilter === 'all'
+                    ? 'border-emerald-500 bg-emerald-600 text-white'
+                    : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                }`}
+              >
+                Todos los grupos
+              </button>
+              {groupData.groups.map((g) => (
+                <button
+                  key={g.groupName}
+                  type="button"
+                  onClick={() => setSelectedGroupFilter(g.groupName)}
+                  className={`min-h-[38px] rounded-xl border px-3 py-1 text-xs font-bold transition ${
+                    selectedGroupFilter === g.groupName
+                      ? 'border-emerald-500 bg-emerald-600 text-white'
+                      : 'border-slate-200 bg-white text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                  }`}
+                >
+                  {g.groupName}
+                </button>
+              ))}
+            </div>
+
+            {groupData.groups
+              .filter(
+                (g) =>
+                  selectedGroupFilter === 'all' ||
+                  g.groupName === selectedGroupFilter
+              )
+              .map((g) => {
+                const regularGroupMatches = g.matches.filter((m) => !m.is_bye);
+                return (
+                  <div
+                    key={g.groupName}
+                    className="overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-2xs dark:border-slate-800 dark:bg-slate-900/60"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-200/80 bg-slate-50/90 px-4 py-2.5 dark:border-slate-800 dark:bg-slate-900/90">
+                      <h3 className="text-sm font-extrabold text-slate-900 dark:text-white">
+                        {g.groupName}
+                      </h3>
+                      <span className="text-xs font-semibold text-slate-500 tabular-nums dark:text-slate-400">
+                        {g.completedMatches}/{g.totalMatches} jugados
+                      </span>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
+                      {regularGroupMatches.map((m) => (
+                        <div key={m.id}>
+                          <div className="bg-slate-50/40 px-4 pt-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:bg-slate-950/30">
+                            {m.round_name}
+                          </div>
+                          {renderLeagueMatchItem(m)}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        )}
+
+        {groupStageView === 'playoff' && hasPlayoff && (
+          <div className="space-y-4">
+            {!groupData.allGroupsCompleted && (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3.5 text-xs font-semibold text-sky-900 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-200">
+                Los cruces de Playoff se llenarán automáticamente apenas finalicen todos los partidos de la Fase de Grupos.
+              </div>
+            )}
+            {renderKnockoutBracketBlock(groupData.playoffMatches)}
+          </div>
+        )}
+
+        {groupStageView === 'knockout' && (
+          <div className="space-y-4">
+            {!groupData.allGroupsCompleted && (
+              <div className="rounded-2xl border border-sky-200 bg-sky-50 p-3.5 text-xs font-semibold text-sky-900 dark:border-sky-500/35 dark:bg-sky-500/15 dark:text-sky-200">
+                Los clasificados a la Eliminatoria Final se definirán automáticamente cuando termine la Fase de Grupos{hasPlayoff ? ' y los cruces de Playoff' : ''}.
+              </div>
+            )}
+            {renderKnockoutBracketBlock(groupData.knockoutMatches)}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (tournament.format !== 'league' && tournament.format !== 'knockout') {
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-6 py-14 text-center dark:border-slate-800 dark:bg-slate-900/40">
@@ -479,7 +1430,7 @@ export default function TournamentMatchesTab({
         </h3>
         <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400">
           La generación automática de cruces está disponible para Liga,
-          Eliminatoria y Último en pie.
+          Eliminatoria, Grupos + Eliminación y Último en pie.
         </p>
       </div>
     );
@@ -620,7 +1571,7 @@ export default function TournamentMatchesTab({
     </div>
   );
 
-  // Vista de LIGA
+  // FORMATO: LIGA
   if (tournament.format === 'league') {
     const roundsMap = new Map();
     matches.forEach((m) => {
@@ -726,261 +1677,7 @@ export default function TournamentMatchesTab({
                   </div>
 
                   <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
-                    {group.regular.map((m) => {
-                      const pA = participantMap.get(m.participant_a_id);
-                      const pB = participantMap.get(m.participant_b_id);
-                      const isCompleted = m.status === 'completed';
-                      const hasScores = m.score_a !== null && m.score_b !== null;
-                      const winnerId = getSingleMatchWinner(m);
-                      const isDraw =
-                        isCompleted &&
-                        (m.is_draw || (hasScores && m.score_a === m.score_b));
-                      const canEdit = isAdmin && pA && pB;
-                      const pollInfo = pollByMatchId.get(m.id) || null;
-                      const formA = recentFormMap.get(m.participant_a_id) || [];
-                      const formB = recentFormMap.get(m.participant_b_id) || [];
-
-                      // Tarjeta Matchday Broadcast destacada si tiene encuesta de Prode asociada
-                      if (pollInfo) {
-                        const isPollOpen =
-                          pollInfo.poll.status === 'open' && !isCompleted;
-
-                        return (
-                          <div
-                            key={m.id}
-                            className="bg-gradient-to-b from-emerald-50/35 via-white/50 to-transparent p-3.5 sm:p-4 dark:from-emerald-500/8 dark:via-slate-900/40"
-                          >
-                            <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5">
-                                <span
-                                  className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider ${
-                                    isPollOpen
-                                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300'
-                                      : 'bg-slate-200/80 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                                  }`}
-                                >
-                                  {isPollOpen && (
-                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
-                                  )}
-                                  <Target className="h-3 w-3" />
-                                  <span>
-                                    {isPollOpen ? 'Prode activo' : 'Prode cerrado'}
-                                  </span>
-                                </span>
-                                <span className="text-[11px] font-semibold text-slate-500 tabular-nums dark:text-slate-400">
-                                  {pollInfo.votesCount}{' '}
-                                  {pollInfo.votesCount === 1 ? 'voto' : 'votos'}
-                                </span>
-                              </div>
-
-                              <div className="flex items-center gap-1.5">
-                                {onOpenProde && isPollOpen && (
-                                  <button
-                                    type="button"
-                                    onClick={onOpenProde}
-                                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700 transition hover:bg-emerald-100 dark:border-emerald-500/35 dark:bg-emerald-500/15 dark:text-emerald-300"
-                                  >
-                                    <span>Votar en Prode</span>
-                                  </button>
-                                )}
-                                {canEdit && (
-                                  <button
-                                    type="button"
-                                    onClick={() => onOpenMatchModal(m, null)}
-                                    className="inline-flex min-h-[44px] items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-100 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-                                  >
-                                    <Pencil className="h-3.5 w-3.5" />
-                                    <span className="hidden sm:inline">
-                                      {isCompleted ? 'Editar' : 'Resultado'}
-                                    </span>
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
-                              <div className="flex min-w-0 items-center justify-end gap-2.5">
-                                <div className="min-w-0 text-right">
-                                  <p
-                                    className={`truncate text-xs sm:text-sm ${
-                                      winnerId === m.participant_a_id
-                                        ? 'font-black text-emerald-700 dark:text-emerald-400'
-                                        : 'font-bold text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    {pA?.name || 'Por definir'}
-                                  </p>
-                                  <FormMiniDots outcomes={formA} align="right" />
-                                </div>
-                                <Avatar
-                                  name={pA?.name || '?'}
-                                  url={resolveParticipantAvatar(pA)}
-                                  size="md"
-                                  highlight={winnerId === m.participant_a_id}
-                                />
-                              </div>
-
-                              <div className="flex min-w-[74px] justify-center sm:min-w-[88px]">
-                                {!isCompleted ? (
-                                  <span className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-600 shadow-2xs dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-                                    <Clock className="h-3.5 w-3.5" />
-                                    <span>VS</span>
-                                  </span>
-                                ) : hasScores ? (
-                                  <span className="rounded-xl bg-slate-900 px-3 py-1.5 font-mono text-sm font-black text-white shadow-xs tabular-nums dark:border dark:border-emerald-500/35 dark:bg-emerald-500/20 dark:text-emerald-200">
-                                    {m.score_a} - {m.score_b}
-                                  </span>
-                                ) : isDraw ? (
-                                  <span className="rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
-                                    Empate
-                                  </span>
-                                ) : (
-                                  <span className="rounded-xl bg-emerald-100 px-3 py-1.5 text-xs font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                    {winnerId === m.participant_a_id
-                                      ? 'G - P'
-                                      : 'P - G'}
-                                  </span>
-                                )}
-                              </div>
-
-                              <div className="flex min-w-0 items-center justify-start gap-2.5">
-                                <Avatar
-                                  name={pB?.name || '?'}
-                                  url={resolveParticipantAvatar(pB)}
-                                  size="md"
-                                  highlight={winnerId === m.participant_b_id}
-                                />
-                                <div className="min-w-0 text-left">
-                                  <p
-                                    className={`truncate text-xs sm:text-sm ${
-                                      winnerId === m.participant_b_id
-                                        ? 'font-black text-emerald-700 dark:text-emerald-400'
-                                        : 'font-bold text-slate-900 dark:text-white'
-                                    }`}
-                                  >
-                                    {pB?.name || 'Por definir'}
-                                  </p>
-                                  <FormMiniDots outcomes={formB} align="left" />
-                                </div>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 rounded-xl border border-slate-200/70 bg-white/75 px-3 py-2 dark:border-slate-800 dark:bg-slate-950/45">
-                              <ProdeTrendBar
-                                trend={pollInfo.trend}
-                                nameA={pA?.name || 'A'}
-                                nameB={pB?.name || 'B'}
-                              />
-                            </div>
-                          </div>
-                        );
-                      }
-
-                      const RowTag = canEdit ? motion.button : motion.div;
-
-                      return (
-                        <RowTag
-                          key={m.id}
-                          {...(canEdit
-                            ? {
-                                type: 'button',
-                                whileTap: { scale: 0.995 },
-                                onClick: () => onOpenMatchModal(m, null),
-                              }
-                            : {})}
-                          className={`flex min-h-[54px] w-full items-center justify-between gap-2 px-3 py-3 text-left transition-colors sm:gap-3 sm:px-4 ${
-                            canEdit
-                              ? 'cursor-pointer hover:bg-emerald-50/50 dark:hover:bg-emerald-500/10'
-                              : ''
-                          }`}
-                        >
-                          <div className="grid flex-1 grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-3">
-                            <div className="flex min-w-0 items-center justify-end gap-2">
-                              <div className="min-w-0 text-right">
-                                <span
-                                  className={`block truncate text-xs sm:text-sm ${
-                                    winnerId === m.participant_a_id
-                                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                      : isDraw
-                                      ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                      : 'font-medium text-slate-800 dark:text-slate-200'
-                                  }`}
-                                >
-                                  {pA?.name || 'Por definir'}
-                                </span>
-                                {formA.length > 0 && (
-                                  <div className="hidden sm:block">
-                                    <FormMiniDots outcomes={formA} align="right" />
-                                  </div>
-                                )}
-                              </div>
-                              <Avatar
-                                name={pA?.name || '?'}
-                                url={resolveParticipantAvatar(pA)}
-                                size="xs"
-                                className="hidden sm:inline-flex"
-                              />
-                            </div>
-
-                            <div className="flex min-w-[68px] justify-center sm:min-w-[78px]">
-                              {!isCompleted ? (
-                                <span className="inline-flex items-center gap-1 rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                                  <Clock className="h-3 w-3" />
-                                  <span>vs</span>
-                                </span>
-                              ) : hasScores ? (
-                                <span className="rounded-lg bg-slate-900 px-2.5 py-1 font-mono text-xs font-bold text-white shadow-2xs tabular-nums dark:border dark:border-emerald-500/30 dark:bg-emerald-500/20 dark:text-emerald-200">
-                                  {m.score_a} - {m.score_b}
-                                </span>
-                              ) : isDraw ? (
-                                <span className="rounded-lg bg-amber-100 px-2.5 py-1 text-[11px] font-bold text-amber-800 dark:bg-amber-500/20 dark:text-amber-200">
-                                  Empate
-                                </span>
-                              ) : (
-                                <span className="rounded-lg bg-emerald-100 px-2.5 py-1 text-[11px] font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                  {winnerId === m.participant_a_id
-                                    ? 'G - P'
-                                    : 'P - G'}
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="flex min-w-0 items-center justify-start gap-2">
-                              <Avatar
-                                name={pB?.name || '?'}
-                                url={resolveParticipantAvatar(pB)}
-                                size="xs"
-                                className="hidden sm:inline-flex"
-                              />
-                              <div className="min-w-0 text-left">
-                                <span
-                                  className={`block truncate text-xs sm:text-sm ${
-                                    winnerId === m.participant_b_id
-                                      ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                                      : isDraw
-                                      ? 'font-semibold text-slate-700 dark:text-slate-300'
-                                      : 'font-medium text-slate-800 dark:text-slate-200'
-                                  }`}
-                                >
-                                  {pB?.name || 'Por definir'}
-                                </span>
-                                {formB.length > 0 && (
-                                  <div className="hidden sm:block">
-                                    <FormMiniDots outcomes={formB} align="left" />
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {canEdit && (
-                            <span className="shrink-0 rounded-lg p-1 text-slate-400">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </span>
-                          )}
-                        </RowTag>
-                      );
-                    })}
+                    {group.regular.map((m) => renderLeagueMatchItem(m))}
                   </div>
 
                   {byePlayer && (
@@ -1005,473 +1702,11 @@ export default function TournamentMatchesTab({
     );
   }
 
-  // Vista de ELIMINATORIA
-  const koSummary = computeKnockoutSummary(participants, matches);
-  const roundsMap = new Map();
-  let thirdPlaceMatch = null;
-
-  matches.forEach((m) => {
-    if (m.round_name === 'Tercer puesto') {
-      thirdPlaceMatch = m;
-      return;
-    }
-    if (!roundsMap.has(m.round_number)) {
-      roundsMap.set(m.round_number, {
-        roundNumber: m.round_number,
-        roundName: m.round_name,
-        tiesMap: new Map(),
-      });
-    }
-    const roundBucket = roundsMap.get(m.round_number);
-    if (!roundBucket.tiesMap.has(m.match_order)) {
-      roundBucket.tiesMap.set(m.match_order, []);
-    }
-    roundBucket.tiesMap.get(m.match_order).push(m);
-  });
-
-  const knockoutRounds = Array.from(roundsMap.values())
-    .sort((a, b) => a.roundNumber - b.roundNumber)
-    .map((round) => ({
-      roundNumber: round.roundNumber,
-      roundName: round.roundName,
-      ties: Array.from(round.tiesMap.entries())
-        .sort((a, b) => a[0] - b[0])
-        .map(([matchOrder, tieMatches]) => ({
-          matchOrder,
-          tieMatches: [...tieMatches].sort((a, b) => a.leg - b.leg),
-        })),
-    }));
-
+  // FORMATO: ELIMINATORIA
   return (
     <div>
-      {koSummary.champion && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.96, y: 8 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          className="podium-gold mb-5 flex items-center gap-3.5 rounded-2xl border p-4"
-        >
-          <Avatar
-            name={koSummary.champion.name}
-            url={resolveParticipantAvatar(koSummary.champion)}
-            size="lg"
-            highlight
-          />
-          <div>
-            <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider text-amber-800 dark:text-amber-300">
-              <Crown className="h-3.5 w-3.5" />
-              <span>¡Campeón de la Eliminatoria!</span>
-            </span>
-            <p className="text-lg font-black text-slate-900 dark:text-white">
-              {koSummary.champion.name}
-            </p>
-          </div>
-        </motion.div>
-      )}
-
       {headerControls}
-
-      <div className="flex gap-4 overflow-x-auto pb-3">
-        {knockoutRounds.map((round, roundIdx) => (
-          <motion.div
-            key={round.roundNumber}
-            initial={{ opacity: 0, x: 14 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{
-              duration: 0.25,
-              delay: Math.min(roundIdx * 0.06, 0.3),
-            }}
-            className="flex min-w-[285px] flex-1 flex-col gap-3"
-          >
-            <div className="rounded-xl border border-slate-200/80 bg-slate-100/85 px-3.5 py-2 text-center backdrop-blur-xs dark:border-slate-800 dark:bg-slate-900/90">
-              <h3 className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-200">
-                {round.roundName}
-              </h3>
-            </div>
-
-            <div className="flex flex-1 flex-col justify-around gap-3">
-              {round.ties.map(({ matchOrder, tieMatches }) => {
-                const series = getKnockoutSeriesStatus(tieMatches);
-                const leg1 = tieMatches[0];
-                const leg2 = tieMatches[1] || null;
-                const player1 = participantMap.get(series.player1Id);
-                const player2 = participantMap.get(series.player2Id);
-
-                if (series.isBye) {
-                  return (
-                    <div
-                      key={matchOrder}
-                      className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 p-3 dark:border-slate-800 dark:bg-slate-900/45"
-                    >
-                      <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-slate-400">
-                        <span>Llave {matchOrder}</span>
-                        <span className="rounded bg-slate-200/70 px-1.5 py-0.5 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-                          Pase libre (BYE)
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Avatar
-                          name={player1?.name || 'Jugador'}
-                          url={resolveParticipantAvatar(player1)}
-                          size="xs"
-                        />
-                        <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
-                          {player1?.name || 'Jugador'}
-                        </p>
-                      </div>
-                      <p className="mt-0.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-400">
-                        Avanza automáticamente
-                      </p>
-                    </div>
-                  );
-                }
-
-                const isSingleLeg = !leg2;
-                const leg1Poll = pollByMatchId.get(leg1.id) || null;
-
-                if (isSingleLeg) {
-                  const canEdit =
-                    isAdmin &&
-                    Boolean(leg1.participant_a_id && leg1.participant_b_id);
-                  const hasScores =
-                    leg1.score_a !== null && leg1.score_b !== null;
-                  const CardTag = canEdit ? motion.button : motion.div;
-
-                  return (
-                    <div
-                      key={matchOrder}
-                      className={`rounded-2xl border bg-white/85 p-3 backdrop-blur-sm transition-colors dark:bg-slate-900/75 ${
-                        series.isCompleted
-                          ? 'border-emerald-300/80 dark:border-emerald-500/35'
-                          : leg1Poll
-                          ? 'border-emerald-300/90 dark:border-emerald-500/40'
-                          : 'border-slate-200/80 dark:border-slate-800'
-                      }`}
-                    >
-                      <CardTag
-                        {...(canEdit
-                          ? {
-                              type: 'button',
-                              whileTap: { scale: 0.985 },
-                              onClick: () => onOpenMatchModal(leg1, null),
-                            }
-                          : {})}
-                        className={`min-h-[44px] w-full text-left ${
-                          canEdit ? 'cursor-pointer' : ''
-                        }`}
-                      >
-                        <div className="mb-2 flex items-center justify-between text-[11px] text-slate-400">
-                          <span className="font-semibold">Llave {matchOrder}</span>
-                          <div className="flex items-center gap-1.5">
-                            {leg1Poll && (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-500/20 dark:text-emerald-300">
-                                <Target className="h-2.5 w-2.5" />
-                                <span>Prode</span>
-                              </span>
-                            )}
-                            {canEdit && <Pencil className="h-3 w-3" />}
-                          </div>
-                        </div>
-
-                        <div className="space-y-1.5">
-                          <div
-                            className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
-                              series.winnerId === leg1.participant_a_id
-                                ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                                : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                            }`}
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <Avatar
-                                name={player1?.name || '?'}
-                                url={resolveParticipantAvatar(player1)}
-                                size="xs"
-                              />
-                              <span className="truncate">
-                                {player1?.name || 'Por definir'}
-                              </span>
-                            </div>
-                            <span className="ml-2 font-mono text-xs font-bold tabular-nums">
-                              {hasScores
-                                ? leg1.score_a
-                                : series.winnerId === leg1.participant_a_id
-                                ? 'G'
-                                : ''}
-                            </span>
-                          </div>
-
-                          <div
-                            className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1.5 text-sm ${
-                              series.winnerId === leg1.participant_b_id
-                                ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                                : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                            }`}
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <Avatar
-                                name={player2?.name || '?'}
-                                url={resolveParticipantAvatar(player2)}
-                                size="xs"
-                              />
-                              <span className="truncate">
-                                {player2?.name || 'Por definir'}
-                              </span>
-                            </div>
-                            <span className="ml-2 font-mono text-xs font-bold tabular-nums">
-                              {hasScores
-                                ? leg1.score_b
-                                : series.winnerId === leg1.participant_b_id
-                                ? 'G'
-                                : ''}
-                            </span>
-                          </div>
-                        </div>
-
-                        {series.resolvedByTiebreak && (
-                          <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                            Avanza por desempate:{' '}
-                            {participantMap.get(series.winnerId)?.name}
-                          </p>
-                        )}
-                      </CardTag>
-
-                      {leg1Poll && (
-                        <div className="mt-2.5 border-t border-slate-100 pt-2 dark:border-slate-800">
-                          <ProdeTrendBar
-                            compact
-                            trend={leg1Poll.trend}
-                            nameA={player1?.name || 'A'}
-                            nameB={player2?.name || 'B'}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                }
-
-                const bothPlayersReady = Boolean(
-                  leg1.participant_a_id && leg1.participant_b_id
-                );
-
-                return (
-                  <div
-                    key={matchOrder}
-                    className={`rounded-2xl border bg-white/85 p-3 backdrop-blur-sm dark:bg-slate-900/75 ${
-                      series.isCompleted
-                        ? 'border-emerald-300/80 dark:border-emerald-500/35'
-                        : 'border-slate-200/80 dark:border-slate-800'
-                    }`}
-                  >
-                    <div className="mb-2 flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
-                      <span className="font-semibold">Llave {matchOrder}</span>
-                      {series.hasAggregate && (
-                        <span className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-700 tabular-nums dark:bg-slate-800 dark:text-slate-200">
-                          Global: {series.agg1} - {series.agg2}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="mb-2.5 space-y-1">
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
-                          series.winnerId === series.player1Id
-                            ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                            : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <Avatar
-                            name={player1?.name || '?'}
-                            url={resolveParticipantAvatar(player1)}
-                            size="xs"
-                          />
-                          <span className="truncate">
-                            {player1?.name || 'Por definir'}
-                          </span>
-                        </div>
-                        {series.winnerId === series.player1Id && (
-                          <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
-                            Avanza
-                          </span>
-                        )}
-                      </div>
-
-                      <div
-                        className={`flex items-center justify-between gap-2 rounded-xl px-2.5 py-1 text-xs ${
-                          series.winnerId === series.player2Id
-                            ? 'bg-emerald-500/15 font-extrabold text-emerald-900 dark:text-emerald-200'
-                            : 'bg-slate-50/90 font-medium text-slate-700 dark:bg-slate-950/60 dark:text-slate-300'
-                        }`}
-                      >
-                        <div className="flex min-w-0 items-center gap-1.5">
-                          <Avatar
-                            name={player2?.name || '?'}
-                            url={resolveParticipantAvatar(player2)}
-                            size="xs"
-                          />
-                          <span className="truncate">
-                            {player2?.name || 'Por definir'}
-                          </span>
-                        </div>
-                        {series.winnerId === series.player2Id && (
-                          <span className="text-[10px] font-extrabold text-emerald-700 dark:text-emerald-300">
-                            Avanza
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5 border-t border-slate-100 pt-2 dark:border-slate-800">
-                      {[leg1, leg2].map((legMatch) => {
-                        const sibling = legMatch.leg === 1 ? leg2 : leg1;
-                        const canEditLeg = isAdmin && bothPlayersReady;
-                        const LegTag = canEditLeg ? motion.button : motion.div;
-                        const legHasScores =
-                          legMatch.score_a !== null && legMatch.score_b !== null;
-                        const legWinner = getSingleMatchWinner(legMatch);
-                        const legPoll = pollByMatchId.get(legMatch.id);
-
-                        return (
-                          <LegTag
-                            key={legMatch.id}
-                            {...(canEditLeg
-                              ? {
-                                  type: 'button',
-                                  whileTap: { scale: 0.985 },
-                                  onClick: () =>
-                                    onOpenMatchModal(legMatch, sibling),
-                                }
-                              : {})}
-                            className={`flex min-h-[44px] w-full items-center justify-between rounded-lg border border-slate-200/80 bg-slate-50/70 px-2.5 py-1.5 text-[11px] transition-colors dark:border-slate-800 dark:bg-slate-950/50 ${
-                              canEditLeg
-                                ? 'cursor-pointer hover:border-emerald-400 hover:bg-emerald-50/50 dark:hover:border-emerald-500/40 dark:hover:bg-emerald-500/10'
-                                : ''
-                            }`}
-                          >
-                            <span className="inline-flex items-center gap-1 font-semibold text-slate-600 dark:text-slate-300">
-                              <span>{legMatch.leg === 1 ? 'Ida' : 'Vuelta'}</span>
-                              {legPoll && (
-                                <Target className="h-3 w-3 text-emerald-500" />
-                              )}
-                            </span>
-                            <span className="font-mono font-bold text-slate-800 tabular-nums dark:text-slate-100">
-                              {legMatch.status === 'pending'
-                                ? 'Pendiente'
-                                : legHasScores
-                                ? `${legMatch.score_a} - ${legMatch.score_b}`
-                                : legWinner
-                                ? `Ganó ${
-                                    participantMap.get(legWinner)?.name || ''
-                                  }`
-                                : 'Cargado'}
-                            </span>
-                          </LegTag>
-                        );
-                      })}
-                    </div>
-
-                    {series.resolvedByTiebreak && (
-                      <p className="mt-2 text-[11px] font-semibold text-amber-700 dark:text-amber-300">
-                        Desempate: {participantMap.get(series.winnerId)?.name}
-                      </p>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      {thirdPlaceMatch && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.24 }}
-          className="podium-bronze mt-5 rounded-2xl border p-4"
-        >
-          <div className="mb-2.5 flex items-center justify-between">
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-orange-800 dark:text-orange-200">
-              Partido por el 3.º puesto
-            </h4>
-            {isAdmin &&
-              thirdPlaceMatch.participant_a_id &&
-              thirdPlaceMatch.participant_b_id && (
-                <motion.button
-                  type="button"
-                  whileTap={{ scale: 0.96 }}
-                  onClick={() => onOpenMatchModal(thirdPlaceMatch, null)}
-                  className="inline-flex min-h-[44px] items-center gap-1 rounded-lg border border-orange-300/80 bg-white/90 px-3 py-1.5 text-xs font-semibold text-orange-800 transition hover:bg-orange-100/70 dark:border-orange-500/35 dark:bg-slate-900/90 dark:text-orange-200 dark:hover:bg-orange-500/20"
-                >
-                  <Pencil className="h-3 w-3" />
-                  <span>
-                    {thirdPlaceMatch.status === 'completed'
-                      ? 'Editar'
-                      : 'Cargar resultado'}
-                  </span>
-                </motion.button>
-              )}
-          </div>
-
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-orange-200/80 bg-white/90 px-4 py-3 text-sm dark:border-orange-500/25 dark:bg-slate-900/85">
-            <div className="flex min-w-0 items-center justify-end gap-2">
-              <span
-                className={`truncate text-right ${
-                  getSingleMatchWinner(thirdPlaceMatch) ===
-                  thirdPlaceMatch.participant_a_id
-                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                    : 'font-semibold text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                {participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
-                  'Perdedor Semifinal 1'}
-              </span>
-              <Avatar
-                name={
-                  participantMap.get(thirdPlaceMatch.participant_a_id)?.name ||
-                  '?'
-                }
-                url={resolveParticipantAvatar(
-                  participantMap.get(thirdPlaceMatch.participant_a_id)
-                )}
-                size="xs"
-              />
-            </div>
-
-            <span className="rounded-lg bg-slate-100 px-3 py-1 font-mono text-xs font-bold text-slate-800 tabular-nums dark:bg-slate-800 dark:text-slate-100">
-              {thirdPlaceMatch.status === 'completed'
-                ? thirdPlaceMatch.score_a !== null &&
-                  thirdPlaceMatch.score_b !== null
-                  ? `${thirdPlaceMatch.score_a} - ${thirdPlaceMatch.score_b}`
-                  : 'Definido'
-                : 'vs'}
-            </span>
-
-            <div className="flex min-w-0 items-center justify-start gap-2">
-              <Avatar
-                name={
-                  participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
-                  '?'
-                }
-                url={resolveParticipantAvatar(
-                  participantMap.get(thirdPlaceMatch.participant_b_id)
-                )}
-                size="xs"
-              />
-              <span
-                className={`truncate text-left ${
-                  getSingleMatchWinner(thirdPlaceMatch) ===
-                  thirdPlaceMatch.participant_b_id
-                    ? 'font-extrabold text-emerald-700 dark:text-emerald-400'
-                    : 'font-semibold text-slate-800 dark:text-slate-200'
-                }`}
-              >
-                {participantMap.get(thirdPlaceMatch.participant_b_id)?.name ||
-                  'Perdedor Semifinal 2'}
-              </span>
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {renderKnockoutBracketBlock(matches)}
     </div>
   );
 }

@@ -30,6 +30,15 @@ function getBracketSeedOrder(bracketSize) {
   return order;
 }
 
+export function getGroupLabel(index) {
+  const idx = Math.max(0, Number(index) || 0);
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+  if (idx < 26) return `Grupo ${alphabet[idx]}`;
+  const first = Math.floor(idx / 26) - 1;
+  const second = idx % 26;
+  return `Grupo ${alphabet[first] || 'A'}${alphabet[second]}`;
+}
+
 export function generateLeagueMatches(tournament, participants) {
   if (!participants || participants.length < 2) {
     throw new Error('Se necesitan al menos 2 participantes para generar la liga.');
@@ -871,4 +880,877 @@ export function computeLastStandingStandings(participants, eliminations) {
     eliminationMap,
     rows,
   };
+}
+
+// =============================================================================
+// MOTOR DE FASE DE GRUPOS + PLAYOFF + ELIMINACIÓN (group_stage)
+// =============================================================================
+
+export function parseGroupStageConfig(config = {}) {
+  const groupCount = Math.max(1, Number.parseInt(config.group_count ?? 2, 10) || 2);
+  const directPerGroup = Math.max(
+    0,
+    Number.parseInt(config.direct_per_group ?? 2, 10) || 0
+  );
+  const playoffPerGroup = Math.max(
+    0,
+    Number.parseInt(config.playoff_per_group ?? 0, 10) || 0
+  );
+  const bestThirdsCount = Math.max(
+    0,
+    Number.parseInt(config.best_thirds_count ?? 0, 10) || 0
+  );
+  const bestThirdsDest =
+    config.best_thirds_destination === 'playoff' ? 'playoff' : 'direct';
+
+  const totalDirect =
+    groupCount * directPerGroup +
+    (bestThirdsCount > 0 && bestThirdsDest === 'direct' ? bestThirdsCount : 0);
+  const totalPlayoff =
+    groupCount * playoffPerGroup +
+    (bestThirdsCount > 0 && bestThirdsDest === 'playoff' ? bestThirdsCount : 0);
+  const totalAdvancing = totalDirect + totalPlayoff;
+
+  const playoffSurvivors = Math.ceil(totalPlayoff / 2);
+  const mainBracketCount = totalDirect + playoffSurvivors;
+  const mainBracketSize =
+    mainBracketCount >= 2 ? 2 ** Math.ceil(Math.log2(mainBracketCount)) : 2;
+  const mainRoundsCount = Math.log2(mainBracketSize);
+
+  return {
+    groupCount,
+    directPerGroup,
+    playoffPerGroup,
+    bestThirdsCount,
+    bestThirdsDest,
+    totalDirect,
+    totalPlayoff,
+    totalAdvancing,
+    playoffTies: Math.floor(totalPlayoff / 2),
+    playoffHasBye: totalPlayoff % 2 === 1,
+    playoffSurvivors,
+    mainBracketCount,
+    mainBracketSize,
+    mainRoundsCount,
+    minPerGroup: Math.max(2, directPerGroup + playoffPerGroup),
+  };
+}
+
+export function isPowerOfTwo(n) {
+  return Number.isInteger(n) && n >= 2 && (n & (n - 1)) === 0;
+}
+
+export function validateGroupStageConfig(config = {}, groupsRosterMap = null) {
+  const parsed = parseGroupStageConfig(config);
+  const errors = [];
+
+  if (parsed.totalAdvancing < 2) {
+    errors.push('Debe avanzar al menos 2 competidores en total.');
+  } else if (parsed.totalPlayoff > 0) {
+    if (parsed.totalPlayoff % 2 !== 0) {
+      errors.push(
+        `Los cupos al Playoff deben ser un número par (actualmente: ${parsed.totalPlayoff}) para armar cruces 1 vs 1.`
+      );
+    } else if (!isPowerOfTwo(parsed.mainBracketCount)) {
+      errors.push(
+        `Luego del Playoff quedarían ${parsed.mainBracketCount} equipos en la llave final (${parsed.totalDirect} directos + ${parsed.playoffSurvivors} ganadores de Playoff). Debe ser potencia de 2 (2, 4, 8, 16, 32).`
+      );
+    }
+  } else if (!isPowerOfTwo(parsed.totalDirect)) {
+    errors.push(
+      `El total de cupos que avanzan debe ser potencia de 2: 2, 4, 8, 16 o 32 (actualmente: ${parsed.totalDirect}).`
+    );
+  }
+
+  if (parsed.bestThirdsCount > parsed.groupCount) {
+    errors.push(
+      `No puedes elegir ${parsed.bestThirdsCount} mejores ${
+        parsed.directPerGroup + parsed.playoffPerGroup + 1
+      }.º si solo hay ${parsed.groupCount} grupos.`
+    );
+  }
+
+  if (groupsRosterMap && groupsRosterMap instanceof Map) {
+    for (let i = 0; i < parsed.groupCount; i += 1) {
+      const label = getGroupLabel(i);
+      const countInGroup = (groupsRosterMap.get(label) || []).length;
+      if (countInGroup < parsed.minPerGroup) {
+        errors.push(
+          `${label} necesita al menos ${parsed.minPerGroup} integrantes (tiene ${countInGroup}).`
+        );
+      }
+    }
+
+    if (parsed.bestThirdsCount > 0) {
+      const targetPos = parsed.directPerGroup + parsed.playoffPerGroup + 1;
+      let eligibleGroups = 0;
+      for (let i = 0; i < parsed.groupCount; i += 1) {
+        const label = getGroupLabel(i);
+        if ((groupsRosterMap.get(label) || []).length >= targetPos) {
+          eligibleGroups += 1;
+        }
+      }
+      if (eligibleGroups < parsed.bestThirdsCount) {
+        errors.push(
+          `Solo ${eligibleGroups} grupos tienen ${targetPos}.º puesto, pero configuraste ${parsed.bestThirdsCount} mejores ${targetPos}.º.`
+        );
+      }
+    }
+  }
+
+  const stageNames = [];
+  if (parsed.totalPlayoff > 0) {
+    stageNames.push(
+      `Playoff (${parsed.playoffTies} ${
+        parsed.playoffTies === 1 ? 'cruce' : 'cruces'
+      })`
+    );
+  }
+  for (let r = 1; r <= parsed.mainRoundsCount; r += 1) {
+    stageNames.push(getBracketRoundName(r, parsed.mainRoundsCount));
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors,
+    parsed,
+    bracketPreview: stageNames.join(' → '),
+  };
+}
+
+export function generateGroupStageMatches(
+  tournament,
+  participants,
+  customGroupAssignments = null
+) {
+  const cfg = tournament.config || {};
+  const parsed = parseGroupStageConfig(cfg);
+  const participantMap = new Map(participants.map((p) => [p.id, p]));
+
+  // Construir rosters por grupo
+  const groupsRosterMap = new Map();
+  for (let i = 0; i < parsed.groupCount; i += 1) {
+    groupsRosterMap.set(getGroupLabel(i), []);
+  }
+
+  const rawAssignments = customGroupAssignments || cfg.group_assignments || null;
+  if (rawAssignments && typeof rawAssignments === 'object') {
+    const usedIds = new Set();
+    for (let i = 0; i < parsed.groupCount; i += 1) {
+      const label = getGroupLabel(i);
+      const ids = Array.isArray(rawAssignments[label])
+        ? rawAssignments[label]
+        : [];
+      const validMembers = [];
+      ids.forEach((id) => {
+        if (participantMap.has(id) && !usedIds.has(id)) {
+          usedIds.add(id);
+          validMembers.push(participantMap.get(id));
+        }
+      });
+      groupsRosterMap.set(label, validMembers);
+    }
+
+    // Si algún participante nuevo quedó afuera, repartirlo en el grupo más chico
+    const remaining = participants.filter((p) => !usedIds.has(p.id));
+    remaining.forEach((p) => {
+      let smallestLabel = getGroupLabel(0);
+      let smallestCount = Infinity;
+      groupsRosterMap.forEach((list, label) => {
+        if (list.length < smallestCount) {
+          smallestCount = list.length;
+          smallestLabel = label;
+        }
+      });
+      groupsRosterMap.get(smallestLabel).push(p);
+    });
+  } else {
+    const shuffled = shuffleArray(participants);
+    shuffled.forEach((p, idx) => {
+      const label = getGroupLabel(idx % parsed.groupCount);
+      groupsRosterMap.get(label).push(p);
+    });
+  }
+
+  const validation = validateGroupStageConfig(cfg, groupsRosterMap);
+  if (!validation.isValid) {
+    throw new Error(validation.errors[0]);
+  }
+
+  const rows = [];
+  let maxGroupRound = 0;
+
+  // 1. Generar partidos de cada grupo (stage: 'group')
+  for (let i = 0; i < parsed.groupCount; i += 1) {
+    const groupLabel = getGroupLabel(i);
+    const members = groupsRosterMap.get(groupLabel) || [];
+    const groupLeagueMatches = generateLeagueMatches(
+      {
+        id: tournament.id,
+        config: { home_and_away: Boolean(cfg.group_home_and_away) },
+      },
+      members
+    );
+
+    groupLeagueMatches.forEach((m) => {
+      if (m.round_number > maxGroupRound) {
+        maxGroupRound = m.round_number;
+      }
+      rows.push({
+        ...m,
+        stage: 'group',
+        group_name: groupLabel,
+        round_name: `${groupLabel} · ${m.round_name}`,
+      });
+    });
+  }
+
+  const koHomeAndAway = Boolean(cfg.knockout_home_and_away);
+  let nextRoundNumber = maxGroupRound + 1;
+
+  // 2. Generar Playoff previo si existen cupos de playoff (stage: 'playoff')
+  if (parsed.totalPlayoff > 0) {
+    const playoffRound = nextRoundNumber;
+    nextRoundNumber += 1;
+
+    let orderCounter = 1;
+    if (parsed.playoffHasBye) {
+      rows.push({
+        tournament_id: tournament.id,
+        stage: 'playoff',
+        group_name: null,
+        round_number: playoffRound,
+        round_name: 'Playoff',
+        match_order: orderCounter,
+        leg: 1,
+        participant_a_id: null,
+        participant_b_id: null,
+        score_a: null,
+        score_b: null,
+        winner_id: null,
+        is_draw: false,
+        is_bye: true,
+        status: 'completed',
+      });
+      orderCounter += 1;
+    }
+
+    for (let t = 0; t < parsed.playoffTies; t += 1) {
+      const mOrder = orderCounter + t;
+      rows.push({
+        tournament_id: tournament.id,
+        stage: 'playoff',
+        group_name: null,
+        round_number: playoffRound,
+        round_name: 'Playoff',
+        match_order: mOrder,
+        leg: 1,
+        participant_a_id: null,
+        participant_b_id: null,
+        score_a: null,
+        score_b: null,
+        winner_id: null,
+        is_draw: false,
+        is_bye: false,
+        status: 'pending',
+      });
+
+      if (koHomeAndAway) {
+        rows.push({
+          tournament_id: tournament.id,
+          stage: 'playoff',
+          group_name: null,
+          round_number: playoffRound,
+          round_name: 'Playoff',
+          match_order: mOrder,
+          leg: 2,
+          participant_a_id: null,
+          participant_b_id: null,
+          score_a: null,
+          score_b: null,
+          winner_id: null,
+          is_draw: false,
+          is_bye: false,
+          status: 'pending',
+        });
+      }
+    }
+  }
+
+  // 3. Generar llave principal de Eliminación (stage: 'knockout')
+  const koBaseRound = nextRoundNumber - 1;
+  const seedOrder = getBracketSeedOrder(parsed.mainBracketSize);
+
+  for (let r = 1; r <= parsed.mainRoundsCount; r += 1) {
+    const matchCount = parsed.mainBracketSize / 2 ** r;
+    const roundNumber = koBaseRound + r;
+    const roundName = getBracketRoundName(r, parsed.mainRoundsCount);
+
+    for (let m = 1; m <= matchCount; m += 1) {
+      const isRound1Bye =
+        r === 1 &&
+        (seedOrder[(m - 1) * 2] > parsed.mainBracketCount ||
+          seedOrder[(m - 1) * 2 + 1] > parsed.mainBracketCount);
+
+      if (isRound1Bye) {
+        rows.push({
+          tournament_id: tournament.id,
+          stage: 'knockout',
+          group_name: null,
+          round_number: roundNumber,
+          round_name: roundName,
+          match_order: m,
+          leg: 1,
+          participant_a_id: null,
+          participant_b_id: null,
+          score_a: null,
+          score_b: null,
+          winner_id: null,
+          is_draw: false,
+          is_bye: true,
+          status: 'completed',
+        });
+      } else {
+        rows.push({
+          tournament_id: tournament.id,
+          stage: 'knockout',
+          group_name: null,
+          round_number: roundNumber,
+          round_name: roundName,
+          match_order: m,
+          leg: 1,
+          participant_a_id: null,
+          participant_b_id: null,
+          score_a: null,
+          score_b: null,
+          winner_id: null,
+          is_draw: false,
+          is_bye: false,
+          status: 'pending',
+        });
+
+        if (koHomeAndAway) {
+          rows.push({
+            tournament_id: tournament.id,
+            stage: 'knockout',
+            group_name: null,
+            round_number: roundNumber,
+            round_name: roundName,
+            match_order: m,
+            leg: 2,
+            participant_a_id: null,
+            participant_b_id: null,
+            score_a: null,
+            score_b: null,
+            winner_id: null,
+            is_draw: false,
+            is_bye: false,
+            status: 'pending',
+          });
+        }
+      }
+    }
+  }
+
+  const thirdPlaceEnabled =
+    Boolean(cfg.third_place) && parsed.mainBracketCount >= 4;
+  if (thirdPlaceEnabled) {
+    rows.push({
+      tournament_id: tournament.id,
+      stage: 'knockout',
+      group_name: null,
+      round_number: koBaseRound + parsed.mainRoundsCount,
+      round_name: 'Tercer puesto',
+      match_order: 2,
+      leg: 1,
+      participant_a_id: null,
+      participant_b_id: null,
+      score_a: null,
+      score_b: null,
+      winner_id: null,
+      is_draw: false,
+      is_bye: false,
+      status: 'pending',
+    });
+  }
+
+  return rows;
+}
+
+export function computeGroupStageStandings(
+  tournament,
+  participants,
+  matches
+) {
+  const cfg = tournament?.config || {};
+  const parsed = parseGroupStageConfig(cfg);
+  const participantMap = new Map(participants.map((p) => [p.id, p]));
+
+  const groupMatchesAll = (matches || []).filter((m) => m.stage === 'group');
+  const playoffMatchesAll = (matches || []).filter((m) => m.stage === 'playoff');
+  const knockoutMatchesAll = (matches || []).filter(
+    (m) => m.stage === 'knockout'
+  );
+
+  // Agrupar partidos y miembros por group_name
+  const matchesByGroup = new Map();
+  const memberIdsByGroup = new Map();
+
+  for (let i = 0; i < parsed.groupCount; i += 1) {
+    const label = getGroupLabel(i);
+    matchesByGroup.set(label, []);
+    memberIdsByGroup.set(label, new Set());
+  }
+
+  groupMatchesAll.forEach((m) => {
+    const label = m.group_name || getGroupLabel(0);
+    if (!matchesByGroup.has(label)) {
+      matchesByGroup.set(label, []);
+      memberIdsByGroup.set(label, new Set());
+    }
+    matchesByGroup.get(label).push(m);
+    if (m.participant_a_id) memberIdsByGroup.get(label).add(m.participant_a_id);
+    if (m.participant_b_id) memberIdsByGroup.get(label).add(m.participant_b_id);
+  });
+
+  const nonByeGroupMatches = groupMatchesAll.filter((m) => !m.is_bye);
+  const allGroupsCompleted =
+    nonByeGroupMatches.length > 0 &&
+    nonByeGroupMatches.every((m) => m.status === 'completed');
+
+  const groups = [];
+  const thirdCandidates = [];
+
+  Array.from(matchesByGroup.entries())
+    .sort((a, b) => a[0].localeCompare(b[0], 'es'))
+    .forEach(([groupName, gMatches]) => {
+      const gMembers = Array.from(memberIdsByGroup.get(groupName) || [])
+        .map((id) => participantMap.get(id))
+        .filter(Boolean);
+
+      const rawRows = computeLeagueStandings(gMembers, gMatches);
+      const rows = rawRows.map((row, idx) => {
+        const rank = idx + 1;
+        const ppg = row.pj > 0 ? row.pts / row.pj : 0;
+        const dgPerGame = row.pj > 0 ? row.dg / row.pj : 0;
+        const gfPerGame = row.pj > 0 ? row.gf / row.pj : 0;
+
+        let zone = 'eliminated';
+        if (rank <= parsed.directPerGroup) {
+          zone = 'direct';
+        } else if (rank <= parsed.directPerGroup + parsed.playoffPerGroup) {
+          zone = 'playoff';
+        }
+
+        return {
+          ...row,
+          groupName,
+          rank,
+          ppg,
+          dgPerGame,
+          gfPerGame,
+          zone,
+          isBestThird: false,
+        };
+      });
+
+      const targetThirdIdx = parsed.directPerGroup + parsed.playoffPerGroup;
+      if (parsed.bestThirdsCount > 0 && rows[targetThirdIdx]) {
+        thirdCandidates.push(rows[targetThirdIdx]);
+      }
+
+      const regularG = gMatches.filter((m) => !m.is_bye);
+      const doneG = regularG.filter((m) => m.status === 'completed');
+
+      groups.push({
+        groupName,
+        matches: gMatches,
+        totalMatches: regularG.length,
+        completedMatches: doneG.length,
+        isCompleted:
+          regularG.length > 0 && doneG.length === regularG.length,
+        rows,
+      });
+    });
+
+  // Ordenar mejores terceros (o mejores siguientes) por PPG para soportar grupos de distinto tamaño
+  thirdCandidates.sort((a, b) => {
+    if (Math.abs(b.ppg - a.ppg) > 1e-6) return b.ppg - a.ppg;
+    if (Math.abs(b.dgPerGame - a.dgPerGame) > 1e-6) {
+      return b.dgPerGame - a.dgPerGame;
+    }
+    if (Math.abs(b.gfPerGame - a.gfPerGame) > 1e-6) {
+      return b.gfPerGame - a.gfPerGame;
+    }
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.dg !== a.dg) return b.dg - a.dg;
+    if (b.gf !== a.gf) return b.gf - a.gf;
+    return a.participant.name.localeCompare(b.participant.name, 'es');
+  });
+
+  const bestThirdsTable = thirdCandidates.map((row, idx) => {
+    const qualified = idx < parsed.bestThirdsCount;
+    if (qualified) {
+      row.zone = parsed.bestThirdsDest;
+      row.isBestThird = true;
+    }
+    return {
+      ...row,
+      thirdRank: idx + 1,
+      qualified,
+    };
+  });
+
+  // Recoger listas finales de clasificados ordenados para seeding
+  const compareSeeds = (a, b) => {
+    if (a.rank !== b.rank) return a.rank - b.rank;
+    if (a.isBestThird !== b.isBestThird) return a.isBestThird ? 1 : -1;
+    if (Math.abs(b.ppg - a.ppg) > 1e-6) return b.ppg - a.ppg;
+    if (Math.abs(b.dgPerGame - a.dgPerGame) > 1e-6) {
+      return b.dgPerGame - a.dgPerGame;
+    }
+    if (b.pts !== a.pts) return b.pts - a.pts;
+    if (b.dg !== a.dg) return b.dg - a.dg;
+    return a.participant.name.localeCompare(b.participant.name, 'es');
+  };
+
+  const directQualifiers = [];
+  const playoffQualifiers = [];
+  groups.forEach((g) => {
+    g.rows.forEach((r) => {
+      if (r.zone === 'direct') directQualifiers.push(r);
+      else if (r.zone === 'playoff') playoffQualifiers.push(r);
+    });
+  });
+
+  directQualifiers.sort(compareSeeds);
+  playoffQualifiers.sort(compareSeeds);
+
+  const knockoutSummary = computeKnockoutSummary(
+    participants,
+    knockoutMatchesAll
+  );
+
+  return {
+    parsed,
+    groups,
+    bestThirdsTable,
+    directQualifiers,
+    playoffQualifiers,
+    allGroupsCompleted,
+    groupMatches: groupMatchesAll,
+    playoffMatches: playoffMatchesAll,
+    knockoutMatches: knockoutMatchesAll,
+    knockoutSummary,
+  };
+}
+
+function pairPlayoffQualifiersAvoidingSameGroup(qualifiers) {
+  const n = qualifiers.length;
+  if (n < 2) return [];
+  const pool = [...qualifiers];
+  const pairs = [];
+
+  // Emparejamiento 1 vs N, 2 vs N-1... evitando mismo grupo si hay alternativa
+  for (let i = 0; i < Math.floor(n / 2); i += 1) {
+    const top = pool[i];
+    let oppIdx = n - 1 - i;
+
+    if (top.groupName === pool[oppIdx].groupName && oppIdx - 1 > i) {
+      for (let alt = oppIdx - 1; alt > i; alt -= 1) {
+        if (pool[alt].groupName !== top.groupName) {
+          const temp = pool[oppIdx];
+          pool[oppIdx] = pool[alt];
+          pool[alt] = temp;
+          break;
+        }
+      }
+    }
+    pairs.push([top, pool[oppIdx]]);
+  }
+
+  return pairs;
+}
+
+export function buildGroupStageProgressionPatches(
+  tournament,
+  participants,
+  latestMatches
+) {
+  if (tournament?.format !== 'group_stage') return [];
+
+  const groupData = computeGroupStageStandings(
+    tournament,
+    participants,
+    latestMatches
+  );
+  const {
+    parsed,
+    allGroupsCompleted,
+    directQualifiers,
+    playoffQualifiers,
+    playoffMatches,
+    knockoutMatches,
+  } = groupData;
+
+  const workingPlayoff = playoffMatches.map((m) => ({ ...m }));
+  const workingKo = knockoutMatches.map((m) => ({ ...m }));
+  const updatesById = new Map();
+
+  function queuePatch(target, patch) {
+    Object.assign(target, patch);
+    updatesById.set(target.id, {
+      id: target.id,
+      ...(updatesById.get(target.id) || {}),
+      ...patch,
+    });
+  }
+
+  // 1. Sincronizar Playoff (stage === 'playoff')
+  const playoffOrders = Array.from(
+    new Set(workingPlayoff.map((m) => m.match_order))
+  ).sort((a, b) => a - b);
+
+  const playoffWinnersByOrder = new Map();
+
+  if (playoffOrders.length > 0) {
+    if (!allGroupsCompleted) {
+      workingPlayoff.forEach((m) => {
+        if (
+          m.participant_a_id !== null ||
+          m.participant_b_id !== null ||
+          m.winner_id !== null ||
+          (!m.is_bye && m.status === 'completed')
+        ) {
+          queuePatch(m, {
+            participant_a_id: null,
+            participant_b_id: null,
+            score_a: null,
+            score_b: null,
+            winner_id: null,
+            is_draw: false,
+            status: m.is_bye ? 'completed' : 'pending',
+          });
+        }
+      });
+    } else {
+      let remainingPlayoff = [...playoffQualifiers];
+      let byeTeam = null;
+      if (parsed.playoffHasBye && remainingPlayoff.length > 0) {
+        byeTeam = remainingPlayoff.shift();
+      }
+      const pairs = pairPlayoffQualifiersAvoidingSameGroup(remainingPlayoff);
+      let pairCursor = 0;
+
+      playoffOrders.forEach((order) => {
+        const tieMatches = workingPlayoff
+          .filter((m) => m.match_order === order)
+          .sort((a, b) => a.leg - b.leg);
+
+        const first = tieMatches[0];
+        if (!first) return;
+
+        if (first.is_bye) {
+          const byeId = byeTeam?.participant?.id || null;
+          if (first.participant_a_id !== byeId || first.winner_id !== byeId) {
+            queuePatch(first, {
+              participant_a_id: byeId,
+              participant_b_id: null,
+              winner_id: byeId,
+              status: 'completed',
+            });
+          }
+          playoffWinnersByOrder.set(order, byeId);
+        } else {
+          const pair = pairs[pairCursor] || [null, null];
+          pairCursor += 1;
+          const id1 = pair[0]?.participant?.id || null;
+          const id2 = pair[1]?.participant?.id || null;
+
+          tieMatches.forEach((target) => {
+            const expectedA = target.leg === 1 ? id1 : id2;
+            const expectedB = target.leg === 1 ? id2 : id1;
+            if (
+              target.participant_a_id !== expectedA ||
+              target.participant_b_id !== expectedB
+            ) {
+              queuePatch(target, {
+                participant_a_id: expectedA,
+                participant_b_id: expectedB,
+                score_a: null,
+                score_b: null,
+                winner_id: null,
+                is_draw: false,
+                status: 'pending',
+              });
+            }
+          });
+
+          const series = getKnockoutSeriesStatus(tieMatches);
+          playoffWinnersByOrder.set(
+            order,
+            series.isCompleted ? series.winnerId : null
+          );
+        }
+      });
+    }
+  }
+
+  // 2. Armar lista de semillas para la llave principal (stage === 'knockout')
+  const mainSeeds = [];
+  for (let i = 0; i < parsed.totalDirect; i += 1) {
+    mainSeeds.push(
+      allGroupsCompleted ? directQualifiers[i]?.participant?.id || null : null
+    );
+  }
+  playoffOrders.forEach((order) => {
+    mainSeeds.push(
+      allGroupsCompleted ? playoffWinnersByOrder.get(order) || null : null
+    );
+  });
+
+  // 3. Sembrar Ronda 1 de stage === 'knockout' y propagar BYEs + rondas siguientes
+  const koRoundNumbers = Array.from(
+    new Set(
+      workingKo
+        .filter((m) => m.round_name !== 'Tercer puesto')
+        .map((m) => m.round_number)
+    )
+  ).sort((a, b) => a - b);
+
+  if (koRoundNumbers.length > 0) {
+    const firstKoRound = koRoundNumbers[0];
+    const lastKoRound = koRoundNumbers[koRoundNumbers.length - 1];
+    const seedOrder = getBracketSeedOrder(parsed.mainBracketSize);
+
+    const round1Matches = workingKo.filter(
+      (m) => m.round_number === firstKoRound && m.round_name !== 'Tercer puesto'
+    );
+    const round1Orders = Array.from(
+      new Set(round1Matches.map((m) => m.match_order))
+    ).sort((a, b) => a - b);
+
+    round1Orders.forEach((order) => {
+      const tieMatches = round1Matches
+        .filter((m) => m.match_order === order)
+        .sort((a, b) => a.leg - b.leg);
+      const first = tieMatches[0];
+      if (!first) return;
+
+      const seedIdxA = seedOrder[(order - 1) * 2] - 1;
+      const seedIdxB = seedOrder[(order - 1) * 2 + 1] - 1;
+      const idA =
+        seedIdxA < mainSeeds.length ? mainSeeds[seedIdxA] || null : null;
+      const idB =
+        seedIdxB < mainSeeds.length ? mainSeeds[seedIdxB] || null : null;
+
+      if (first.is_bye) {
+        const byeWinner = idA || idB || null;
+        if (
+          first.participant_a_id !== byeWinner ||
+          first.winner_id !== byeWinner
+        ) {
+          queuePatch(first, {
+            participant_a_id: byeWinner,
+            participant_b_id: null,
+            winner_id: byeWinner,
+            status: 'completed',
+          });
+        }
+      } else {
+        tieMatches.forEach((target) => {
+          const expectedA = target.leg === 1 ? idA : idB;
+          const expectedB = target.leg === 1 ? idB : idA;
+          if (
+            target.participant_a_id !== expectedA ||
+            target.participant_b_id !== expectedB
+          ) {
+            queuePatch(target, {
+              participant_a_id: expectedA,
+              participant_b_id: expectedB,
+              score_a: null,
+              score_b: null,
+              winner_id: null,
+              is_draw: false,
+              status: 'pending',
+            });
+          }
+        });
+      }
+    });
+
+    // Cascada entre rondas de Knockout
+    for (let idx = 0; idx < koRoundNumbers.length - 1; idx += 1) {
+      const currentRound = koRoundNumbers[idx];
+      const nextRound = koRoundNumbers[idx + 1];
+
+      const curMatches = workingKo.filter(
+        (m) =>
+          m.round_number === currentRound && m.round_name !== 'Tercer puesto'
+      );
+      const curOrders = Array.from(
+        new Set(curMatches.map((m) => m.match_order))
+      ).sort((a, b) => a - b);
+
+      curOrders.forEach((order) => {
+        const tieMatches = curMatches.filter((m) => m.match_order === order);
+        const series = getKnockoutSeriesStatus(tieMatches);
+        const nextOrder = Math.ceil(order / 2);
+        const isTopSlot = order % 2 === 1;
+        const nextWinnerId = series.isCompleted ? series.winnerId : null;
+
+        const targetMatches = workingKo.filter(
+          (m) =>
+            m.round_number === nextRound &&
+            m.match_order === nextOrder &&
+            m.round_name !== 'Tercer puesto'
+        );
+
+        targetMatches.forEach((target) => {
+          const fieldToSet =
+            target.leg === 1
+              ? isTopSlot
+                ? 'participant_a_id'
+                : 'participant_b_id'
+              : isTopSlot
+              ? 'participant_b_id'
+              : 'participant_a_id';
+
+          if (target[fieldToSet] !== nextWinnerId) {
+            queuePatch(target, {
+              [fieldToSet]: nextWinnerId,
+              score_a: null,
+              score_b: null,
+              winner_id: null,
+              is_draw: false,
+              status: 'pending',
+            });
+          }
+        });
+
+        const isSemi = nextRound === lastKoRound;
+        if (isSemi) {
+          const thirdPlaceMatch = workingKo.find(
+            (m) => m.round_name === 'Tercer puesto'
+          );
+          if (thirdPlaceMatch) {
+            const loserId = series.isCompleted ? series.loserId : null;
+            const fieldToSet = isTopSlot ? 'participant_a_id' : 'participant_b_id';
+            if (thirdPlaceMatch[fieldToSet] !== loserId) {
+              queuePatch(thirdPlaceMatch, {
+                [fieldToSet]: loserId,
+                score_a: null,
+                score_b: null,
+                winner_id: null,
+                is_draw: false,
+                status: 'pending',
+              });
+            }
+          }
+        }
+      });
+    }
+  }
+
+  return Array.from(updatesById.values());
 }

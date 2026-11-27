@@ -84,7 +84,35 @@ export function computeTournamentSummary({
       unbeatenStreak: null,
       rollerCoaster: null,
       progressLabel: 'Sin actividad aún',
-    };
+    };} else if (format === 'group_stage') {
+    const gs = computeGroupStageStandings(tournament, participants, matches);
+    if (gs.knockoutSummary.champion) {
+      podium.push({
+        place: 1,
+        participant: gs.knockoutSummary.champion,
+        metric: 'Campeón',
+        subtext: 'Ganador de la llave final',
+      });
+    }
+    if (gs.knockoutSummary.runnerUp) {
+      podium.push({
+        place: 2,
+        participant: gs.knockoutSummary.runnerUp,
+        metric: 'Subcampeón',
+        subtext: 'Finalista',
+      });
+    }
+    if (gs.knockoutSummary.thirdPlace) {
+      podium.push({
+        place: 3,
+        participant: gs.knockoutSummary.thirdPlace,
+        metric: '3.º Puesto',
+        subtext: 'Ganador del 3.º puesto',
+      });
+    }
+    const regularAll = matches.filter((m) => !m.is_bye);
+    const doneAll = regularAll.filter((m) => m.status === 'completed');
+    progressLabel = `${doneAll.length} de ${regularAll.length} partidos jugados (${gs.groups.length} grupos + eliminación)`;
   }
 
   const format = tournament.format;
