@@ -1266,6 +1266,7 @@ export default function SubtournamentDetailView({
         siblingLeg={matchModalState.siblingLeg}
         tournamentFormat={matchModalFormat}
         participantMap={entryMap}
+        leagueTiebreakerEnabled={Boolean(subtournament.config?.league_tiebreaker)}
         onClose={() =>
           setMatchModalState({ isOpen: false, match: null, siblingLeg: null })
         }

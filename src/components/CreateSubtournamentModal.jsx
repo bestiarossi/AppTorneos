@@ -23,6 +23,13 @@ import {
 } from '../utils/customTournamentEngine';
 import { validateGroupStageConfig } from '../utils/tournamentEngine';
 
+const MEETINGS_PRESETS = [
+  { value: 1, label: '1 vuelta' },
+  { value: 2, label: '2 (Ida/Vuelta)' },
+  { value: 3, label: '3 vueltas' },
+  { value: 4, label: '4 vueltas' },
+];
+
 export default function CreateSubtournamentModal({
   isOpen,
   matchday,
@@ -40,6 +47,8 @@ export default function CreateSubtournamentModal({
   const [category, setCategory] = useState('');
   const [format, setFormat] = useState('league');
   const [homeAndAway, setHomeAndAway] = useState(false);
+  const [meetingsPerPair, setMeetingsPerPair] = useState('1');
+  const [leagueTiebreaker, setLeagueTiebreaker] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
 
   // Opciones específicas cuando format === 'group_stage'
@@ -71,6 +80,8 @@ export default function CreateSubtournamentModal({
     setCategory('');
     setFormat('league');
     setHomeAndAway(false);
+    setMeetingsPerPair('1');
+    setLeagueTiebreaker(false);
     setThirdPlace(false);
     setGroupCount('2');
     setDirectPerGroup('2');
@@ -208,7 +219,13 @@ export default function CreateSubtournamentModal({
     };
 
     if (format === 'league') {
-      config.home_and_away = homeAndAway;
+      const parsedMeetings = Math.max(
+        1,
+        Math.min(10, Number.parseInt(meetingsPerPair || '1', 10) || 1)
+      );
+      config.meetings_per_pair = parsedMeetings;
+      config.home_and_away = parsedMeetings >= 2;
+      config.league_tiebreaker = leagueTiebreaker;
     } else if (format === 'knockout') {
       config.home_and_away = homeAndAway;
       config.third_place = thirdPlace && (isTeamBased || competitorCount >= 4);
@@ -227,6 +244,7 @@ export default function CreateSubtournamentModal({
         best_thirds_destination: bestThirdsDest,
         group_home_and_away: groupHomeAndAway,
         knockout_home_and_away: koHomeAndAway,
+        league_tiebreaker: leagueTiebreaker,
         third_place: thirdPlace,
       };
     }
@@ -253,8 +271,6 @@ export default function CreateSubtournamentModal({
       if (subError) throw subError;
       createdSubId = createdSub.id;
 
-      // En modalidad Individual creamos las entradas y partidos de una.
-      // En modalidad Por Equipos los equipos se arman/sortean en la pestaña "Equipos" del subtorneo.
       if (!isTeamBased) {
         const entryPayloads = selectedParticipantIds.map((pId) => ({
           subtournament_id: createdSub.id,
@@ -399,7 +415,6 @@ export default function CreateSubtournamentModal({
                   />
                 </div>
 
-                {/* Categoría para agrupar estadísticas */}
                 <div className="rounded-2xl border border-slate-200/90 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/45">
                   <label
                     htmlFor="subtournament-category"
@@ -478,7 +493,67 @@ export default function CreateSubtournamentModal({
                     })}
                   </div>
 
-                  {(format === 'league' || format === 'knockout') && (
+                  {format === 'league' && (
+                    <div className="mt-3 space-y-3 rounded-xl border border-slate-200 bg-slate-50/70 p-3.5 dark:border-slate-800 dark:bg-slate-950/45">
+                      <div>
+                        <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">
+                          Encuentros contra cada rival (vueltas)
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {MEETINGS_PRESETS.map((opt) => {
+                            const active =
+                              String(opt.value) === String(meetingsPerPair);
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() =>
+                                  setMeetingsPerPair(String(opt.value))
+                                }
+                                className={`min-h-[38px] rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                                  active
+                                    ? 'border-emerald-500 bg-emerald-600 text-white'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={meetingsPerPair}
+                            onChange={(e) => setMeetingsPerPair(e.target.value)}
+                            aria-label="Cantidad personalizada de vueltas"
+                            className="h-[38px] w-16 rounded-xl border border-slate-200 bg-white px-2 text-center font-mono text-sm font-black text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <label className="flex min-h-[44px] cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs dark:border-slate-800 dark:bg-slate-900">
+                        <input
+                          type="checkbox"
+                          checked={leagueTiebreaker}
+                          onChange={(e) =>
+                            setLeagueTiebreaker(e.target.checked)
+                          }
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
+                        />
+                        <div>
+                          <span className="block font-bold text-slate-800 dark:text-slate-100">
+                            Desempate por penales (3 / 2 / 1 pts)
+                          </span>
+                          <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Ganar 3 pts · Ganar desempate 2 · Perder desempate 1
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+
+                  {format === 'knockout' && (
                     <div className="mt-3 grid grid-cols-1 gap-2.5 rounded-xl border border-slate-200 bg-slate-50/70 p-3 sm:grid-cols-2 dark:border-slate-800 dark:bg-slate-950/45">
                       <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                         <input
@@ -487,24 +562,18 @@ export default function CreateSubtournamentModal({
                           onChange={(e) => setHomeAndAway(e.target.checked)}
                           className="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
                         />
-                        <span>
-                          {format === 'league'
-                            ? 'Ida y vuelta'
-                            : 'Cruces a ida y vuelta'}
-                        </span>
+                        <span>Cruces a ida y vuelta</span>
                       </label>
 
-                      {format === 'knockout' && (
-                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                          <input
-                            type="checkbox"
-                            checked={thirdPlace}
-                            onChange={(e) => setThirdPlace(e.target.checked)}
-                            className="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
-                          />
-                          <span>Partido por el 3.º puesto (4+ comp.)</span>
-                        </label>
-                      )}
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs font-semibold text-slate-700 active:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                        <input
+                          type="checkbox"
+                          checked={thirdPlace}
+                          onChange={(e) => setThirdPlace(e.target.checked)}
+                          className="h-4 w-4 shrink-0 rounded border-slate-300 text-emerald-600"
+                        />
+                        <span>Partido por el 3.º puesto (4+ comp.)</span>
+                      </label>
                     </div>
                   )}
 
@@ -633,7 +702,7 @@ export default function CreateSubtournamentModal({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                           <input
                             type="checkbox"
@@ -655,6 +724,17 @@ export default function CreateSubtournamentModal({
                             className="h-4 w-4 rounded border-slate-300 text-emerald-600"
                           />
                           <span>Elim. ida y vuelta</span>
+                        </label>
+                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={leagueTiebreaker}
+                            onChange={(e) =>
+                              setLeagueTiebreaker(e.target.checked)
+                            }
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>Desempate grupos (3/2/1)</span>
                         </label>
                         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                           <input
@@ -733,7 +813,7 @@ export default function CreateSubtournamentModal({
                 )}
               </div>
 
-              {/* 3. Modalidad Individual vs Por Equipos (simple y limpio) */}
+              {/* 3. Modalidad Individual vs Por Equipos */}
               <div>
                 <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
                   Modalidad de competencia

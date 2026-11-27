@@ -20,6 +20,13 @@ import { TOURNAMENT_FORMAT_LIST } from '../utils/tournamentFormats';
 import { TOURNAMENT_SPORT_LIST } from '../utils/tournamentThemes';
 import { useToast } from './ToastProvider';
 
+const MEETINGS_PRESETS = [
+  { value: 1, label: '1 vuelta' },
+  { value: 2, label: '2 (Ida/Vuelta)' },
+  { value: 3, label: '3 vueltas' },
+  { value: 4, label: '4 vueltas' },
+];
+
 export default function CreateTournamentModal({
   isOpen,
   onClose,
@@ -32,6 +39,8 @@ export default function CreateTournamentModal({
   const [format, setFormat] = useState('league');
   const [isTeamBased, setIsTeamBased] = useState(false);
   const [homeAndAway, setHomeAndAway] = useState(false);
+  const [meetingsPerPair, setMeetingsPerPair] = useState('1');
+  const [leagueTiebreaker, setLeagueTiebreaker] = useState(false);
   const [thirdPlace, setThirdPlace] = useState(false);
   const [rounds, setRounds] = useState('');
   const [initialLives, setInitialLives] = useState('1');
@@ -75,6 +84,8 @@ export default function CreateTournamentModal({
     setFormat('league');
     setIsTeamBased(false);
     setHomeAndAway(false);
+    setMeetingsPerPair('1');
+    setLeagueTiebreaker(false);
     setThirdPlace(false);
     setRounds('');
     setInitialLives('1');
@@ -158,9 +169,15 @@ export default function CreateTournamentModal({
     };
 
     if (format === 'league') {
+      const parsedMeetings = Math.max(
+        1,
+        Math.min(10, Number.parseInt(meetingsPerPair || '1', 10) || 1)
+      );
       return {
         ...base,
-        home_and_away: homeAndAway,
+        meetings_per_pair: parsedMeetings,
+        home_and_away: parsedMeetings >= 2,
+        league_tiebreaker: leagueTiebreaker,
         ...(parsedRounds ? { rounds: parsedRounds } : {}),
       };
     }
@@ -187,6 +204,7 @@ export default function CreateTournamentModal({
         best_thirds_destination: bestThirdsDest,
         group_home_and_away: groupHomeAndAway,
         knockout_home_and_away: koHomeAndAway,
+        league_tiebreaker: leagueTiebreaker,
         third_place: thirdPlace,
       };
     }
@@ -441,7 +459,6 @@ export default function CreateTournamentModal({
                 </div>
               </div>
 
-              {/* Modalidad: Individual vs Por Equipos (para torneos no-custom) */}
               {format !== 'custom' && (
                 <div>
                   <span className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
@@ -500,37 +517,83 @@ export default function CreateTournamentModal({
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -6 }}
                       transition={{ duration: 0.16 }}
-                      className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+                      className="space-y-3"
                     >
-                      <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
-                        <input
-                          type="checkbox"
-                          checked={homeAndAway}
-                          onChange={(e) => setHomeAndAway(e.target.checked)}
-                          className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <span className="text-sm font-medium text-slate-700 dark:text-slate-200">
-                          Ida y vuelta
-                        </span>
-                      </label>
-
                       <div>
-                        <label
-                          htmlFor="league-rounds"
-                          className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
-                        >
-                          Jornadas (opcional)
+                        <span className="mb-1.5 block text-xs font-bold text-slate-600 dark:text-slate-300">
+                          Encuentros contra cada rival (vueltas)
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {MEETINGS_PRESETS.map((opt) => {
+                            const active =
+                              String(opt.value) === String(meetingsPerPair);
+                            return (
+                              <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() =>
+                                  setMeetingsPerPair(String(opt.value))
+                                }
+                                className={`min-h-[38px] rounded-xl border px-3 py-1.5 text-xs font-bold transition ${
+                                  active
+                                    ? 'border-emerald-500 bg-emerald-600 text-white'
+                                    : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
+                                }`}
+                              >
+                                {opt.label}
+                              </button>
+                            );
+                          })}
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={meetingsPerPair}
+                            onChange={(e) => setMeetingsPerPair(e.target.value)}
+                            aria-label="Cantidad personalizada de vueltas"
+                            className="h-[38px] w-16 rounded-xl border border-slate-200 bg-white px-2 text-center font-mono text-sm font-black text-slate-900 focus:border-emerald-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-white"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="flex min-h-[44px] cursor-pointer items-start gap-2.5 rounded-xl border border-slate-200/90 bg-white/90 px-3.5 py-2.5 transition hover:border-emerald-400/60 dark:border-slate-700/80 dark:bg-slate-900/80">
+                          <input
+                            type="checkbox"
+                            checked={leagueTiebreaker}
+                            onChange={(e) =>
+                              setLeagueTiebreaker(e.target.checked)
+                            }
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                          />
+                          <div>
+                            <span className="block text-xs font-bold text-slate-800 dark:text-slate-100">
+                              Desempate por penales (3 / 2 / 1)
+                            </span>
+                            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                              Ganar 3 pts · Ganar desempate 2 · Perder desempate 1
+                            </span>
+                          </div>
                         </label>
-                        <input
-                          id="league-rounds"
-                          type="number"
-                          min={1}
-                          max={99}
-                          value={rounds}
-                          onChange={(e) => setRounds(e.target.value)}
-                          placeholder="Automático"
-                          className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
-                        />
+
+                        <div>
+                          <label
+                            htmlFor="league-rounds"
+                            className="mb-1 block text-xs font-medium text-slate-600 dark:text-slate-400"
+                          >
+                            Límite de fechas (opcional)
+                          </label>
+                          <input
+                            id="league-rounds"
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={rounds}
+                            onChange={(e) => setRounds(e.target.value)}
+                            placeholder="Automático"
+                            className="w-full rounded-xl border border-slate-200/90 bg-white/90 px-3 py-2 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-slate-700/80 dark:bg-slate-900/80 dark:text-slate-100"
+                          />
+                        </div>
                       </div>
                     </motion.div>
                   )}
@@ -692,9 +755,6 @@ export default function CreateTournamentModal({
                               <p className="text-[11px] opacity-90">
                                 Fase final: {groupStageValidation.bracketPreview}
                               </p>
-                              <p className="text-[11px] opacity-80">
-                                Podrás ajustar libremente cuántos y qué jugadores van a cada grupo antes de sortear.
-                              </p>
                             </div>
                           ) : (
                             <p className="flex items-start gap-1.5 font-bold">
@@ -705,7 +765,7 @@ export default function CreateTournamentModal({
                         </div>
                       )}
 
-                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                           <input
                             type="checkbox"
@@ -723,6 +783,15 @@ export default function CreateTournamentModal({
                             className="h-4 w-4 rounded border-slate-300 text-emerald-600"
                           />
                           <span>Elim. ida y vuelta</span>
+                        </label>
+                        <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                          <input
+                            type="checkbox"
+                            checked={leagueTiebreaker}
+                            onChange={(e) => setLeagueTiebreaker(e.target.checked)}
+                            className="h-4 w-4 rounded border-slate-300 text-emerald-600"
+                          />
+                          <span>Desempate grupos (3/2/1)</span>
                         </label>
                         <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                           <input

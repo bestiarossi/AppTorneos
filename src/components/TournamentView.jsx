@@ -2939,12 +2939,13 @@ export default function TournamentView({
           </motion.aside>
         </div>
 
-        <MatchResultModal
+       <MatchResultModal
           isOpen={matchModalState.isOpen}
           match={matchModalState.match}
           siblingLeg={matchModalState.siblingLeg}
           tournamentFormat={tournament.format}
           participantMap={participantMap}
+          leagueTiebreakerEnabled={Boolean(tournament.config?.league_tiebreaker)}
           onClose={() =>
             setMatchModalState({ isOpen: false, match: null, siblingLeg: null })
           }

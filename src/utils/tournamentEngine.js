@@ -78,50 +78,43 @@ export function generateLeagueMatches(tournament, participants) {
     rotating = [rotating[rotating.length - 1], ...rotating.slice(0, -1)];
   }
 
-  const homeAndAway = Boolean(tournament.config?.home_and_away);
+  const parsedMeetings = Number.parseInt(
+    tournament.config?.meetings_per_pair,
+    10
+  );
+  const meetingsPerPair =
+    !Number.isNaN(parsedMeetings) && parsedMeetings >= 1
+      ? Math.min(parsedMeetings, 10)
+      : tournament.config?.home_and_away
+      ? 2
+      : 1;
+
   const configuredRounds = Number.parseInt(tournament.config?.rounds, 10);
-  const hasConfiguredRounds = !Number.isNaN(configuredRounds) && configuredRounds > 0;
+  const hasConfiguredRounds =
+    !Number.isNaN(configuredRounds) && configuredRounds > 0;
 
-  let allRounds = [];
-
-  if (homeAndAway) {
-    const secondCycle = firstCycle.map((pairs) =>
-      pairs.map((pair) => ({
-        a: pair.b,
-        b: pair.a,
-        leg: 2,
-      }))
-    );
-    const fullDoubleCycle = [
-      ...firstCycle.map((pairs) => pairs.map((pair) => ({ ...pair, leg: 1 }))),
-      ...secondCycle,
-    ];
-
-    if (hasConfiguredRounds) {
-      for (let r = 0; r < configuredRounds; r += 1) {
-        const template = fullDoubleCycle[r % fullDoubleCycle.length];
-        allRounds.push(template);
-      }
-    } else {
-      allRounds = fullDoubleCycle;
-    }
-  } else if (hasConfiguredRounds) {
-    for (let r = 0; r < configuredRounds; r += 1) {
-      const cycleIndex = Math.floor(r / roundsPerCycle);
-      const template = firstCycle[r % roundsPerCycle];
-      const swapHome = cycleIndex % 2 === 1;
-      allRounds.push(
-        template.map((pair) => ({
+  const fullMultiCycle = [];
+  for (let cycleIdx = 0; cycleIdx < meetingsPerPair; cycleIdx += 1) {
+    const swapHome = cycleIdx % 2 === 1;
+    firstCycle.forEach((pairs) => {
+      fullMultiCycle.push(
+        pairs.map((pair) => ({
           a: swapHome ? pair.b : pair.a,
           b: swapHome ? pair.a : pair.b,
           leg: swapHome ? 2 : 1,
         }))
       );
+    });
+  }
+
+  let allRounds = [];
+  if (hasConfiguredRounds) {
+    for (let r = 0; r < configuredRounds; r += 1) {
+      const template = fullMultiCycle[r % fullMultiCycle.length];
+      allRounds.push(template);
     }
   } else {
-    allRounds = firstCycle.map((pairs) =>
-      pairs.map((pair) => ({ ...pair, leg: 1 }))
-    );
+    allRounds = fullMultiCycle;
   }
 
   const rows = [];
@@ -649,8 +642,16 @@ export function computeLeagueStandings(participants, matches) {
     if (match.is_draw || isExactDraw) {
       rowA.pe += 1;
       rowB.pe += 1;
-      rowA.pts += 1;
-      rowB.pts += 1;
+      if (match.winner_id === match.participant_a_id) {
+        rowA.pts += 2;
+        rowB.pts += 1;
+      } else if (match.winner_id === match.participant_b_id) {
+        rowB.pts += 2;
+        rowA.pts += 1;
+      } else {
+        rowA.pts += 1;
+        rowB.pts += 1;
+      }
       return;
     }
 
@@ -1087,11 +1088,13 @@ export function generateGroupStageMatches(
     const groupLeagueMatches = generateLeagueMatches(
       {
         id: tournament.id,
-        config: { home_and_away: Boolean(cfg.group_home_and_away) },
+        config: {
+          home_and_away: Boolean(cfg.group_home_and_away),
+          meetings_per_pair: cfg.group_meetings_per_pair,
+        },
       },
       members
     );
-
     groupLeagueMatches.forEach((m) => {
       if (m.round_number > maxGroupRound) {
         maxGroupRound = m.round_number;
