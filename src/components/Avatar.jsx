@@ -10,10 +10,10 @@ const SIZE_CLASSES = {
 
 const FALLBACK_GRADIENTS = [
   'from-emerald-500 to-teal-600 text-white',
-  'from-sky-500 to-indigo-600 text-white',
-  'from-amber-500 to-orange-600 text-white',
-  'from-rose-500 to-pink-600 text-white',
-  'from-violet-500 to-purple-600 text-white',
+  'from-[#2563EB] to-indigo-700 text-white',
+  'from-amber-400 to-orange-600 text-slate-950',
+  'from-rose-500 to-pink-700 text-white',
+  'from-violet-500 to-purple-700 text-white',
   'from-cyan-500 to-blue-600 text-white',
   'from-fuchsia-500 to-rose-600 text-white',
   'from-teal-500 to-emerald-700 text-white',
@@ -54,16 +54,16 @@ export default function Avatar({
   const sizeClass = SIZE_CLASSES[size] || SIZE_CLASSES.md;
   const showImage = Boolean(url) && !imgError;
   const gradientClass = highlight
-    ? 'from-emerald-500 to-teal-600 text-white'
+    ? 'from-emerald-500 to-teal-600 text-white dark:from-[#CCFF00] dark:to-lime-400 dark:text-[#0B0E14] classic:from-[#C86D51] classic:to-[#A44E35] classic:text-[#FFFBF4]'
     : getGradientByName(name);
 
   return (
     <div
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-extrabold shadow-xs select-none ${sizeClass} ${
+      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-full font-extrabold tracking-tight select-none ${sizeClass} ${
         highlight
-          ? 'ring-2 ring-emerald-500/70 ring-offset-2 ring-offset-white dark:ring-offset-slate-900'
-          : ''
-      } ${!showImage ? `bg-gradient-to-br ${gradientClass}` : 'bg-slate-200 dark:bg-slate-800'} ${className}`}
+          ? 'ring-2 ring-emerald-500/80 ring-offset-2 ring-offset-[var(--app-bg)] dark:ring-[#CCFF00] classic:ring-[#C86D51]'
+          : 'ring-1 ring-black/10 dark:ring-white/15 classic:ring-[#1B4332]/20'
+      } ${!showImage ? `bg-gradient-to-br ${gradientClass}` : 'bg-slate-200 dark:bg-[#141923] classic:bg-[#EFE6D5]'} ${className}`}
       title={name || undefined}
     >
       {showImage ? (

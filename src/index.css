@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant classic (&:where(.classic, .classic *));
 
 @theme {
   --font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -8,18 +9,59 @@
 }
 
 @layer base {
-  :root,
+  /* MODO CLARO (Clean Arena Light) */
+  :root {
+    --app-bg: #F4F6FA;
+    --app-surface: #FFFFFF;
+    --app-surface-2: #F8FAFC;
+    --app-text: #0F172A;
+    --app-muted: #64748B;
+    --app-border: rgba(15, 23, 42, 0.09);
+    --accent-primary: #059669;
+    --accent-primary-text: #FFFFFF;
+    --accent-secondary: #2563EB;
+    --glass-bg: rgba(255, 255, 255, 0.88);
+    --glass-border: rgba(203, 213, 225, 0.85);
+    --glass-highlight: rgba(255, 255, 255, 0.95);
+    --glass-shadow: 0 12px 32px -14px rgba(15, 23, 42, 0.1), 0 2px 6px -1px rgba(15, 23, 42, 0.04);
+    color-scheme: light;
+  }
+
+  /* MODO OSCURO (Sport-Tech / Playus) */
   .dark {
     --app-bg: #0B0E14;
     --app-surface: #141923;
+    --app-surface-2: #1A2130;
     --app-text: #F8FAFC;
-    --accent-lime: #CCFF00;
-    --accent-cobalt: #2563EB;
-    --glass-bg: rgba(20, 25, 35, 0.88);
+    --app-muted: #94A3B8;
+    --app-border: rgba(255, 255, 255, 0.08);
+    --accent-primary: #CCFF00;
+    --accent-primary-text: #0B0E14;
+    --accent-secondary: #2563EB;
+    --glass-bg: rgba(20, 25, 35, 0.9);
     --glass-border: rgba(255, 255, 255, 0.08);
     --glass-highlight: rgba(255, 255, 255, 0.06);
-    --glass-shadow: 0 20px 48px -18px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(255, 255, 255, 0.02);
+    --glass-shadow: 0 20px 44px -18px rgba(0, 0, 0, 0.78), 0 0 0 1px rgba(255, 255, 255, 0.03);
     color-scheme: dark;
+  }
+
+  /* MODO CLÁSICO (Club Vintage — Pergamino, Bosque & Terracota) */
+  .classic {
+    --app-bg: #F5EFE4;
+    --app-surface: #FFFBF4;
+    --app-surface-2: #EFE6D5;
+    --app-text: #1F2A24;
+    --app-muted: #5F6B61;
+    --app-border: rgba(27, 67, 50, 0.16);
+    --accent-primary: #1B4332;
+    --accent-primary-text: #FBF7EE;
+    --accent-secondary: #C86D51;
+    --accent-gold: #D4A03E;
+    --glass-bg: rgba(255, 251, 244, 0.92);
+    --glass-border: rgba(27, 67, 50, 0.18);
+    --glass-highlight: rgba(255, 255, 255, 0.9);
+    --glass-shadow: 0 4px 0 rgba(27, 67, 50, 0.1), 0 14px 28px -12px rgba(27, 67, 50, 0.14);
+    color-scheme: light;
   }
 
   html {
@@ -36,7 +78,7 @@
     background-color: var(--app-bg);
     color: var(--app-text);
     padding-bottom: env(safe-area-inset-bottom);
-    transition: background-color 0.25s ease, color 0.25s ease;
+    transition: background-color 0.35s ease, color 0.25s ease;
     overflow-x: clip;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
@@ -55,11 +97,6 @@
     touch-action: manipulation;
   }
 
-  ::selection {
-    background-color: rgba(204, 255, 0, 0.25);
-    color: #CCFF00;
-  }
-
   @media (max-width: 768px) {
     input,
     select,
@@ -69,65 +106,92 @@
   }
 
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
   }
 
   ::-webkit-scrollbar-track {
-    background: #0B0E14;
+    background: transparent;
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.14);
+    background: rgba(148, 163, 184, 0.35);
     border-radius: 9999px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(204, 255, 0, 0.45);
+    background: rgba(148, 163, 184, 0.55);
+  }
+
+  .classic ::-webkit-scrollbar-thumb {
+    background: rgba(27, 67, 50, 0.28);
+  }
+
+  .classic ::-webkit-scrollbar-thumb:hover {
+    background: rgba(200, 109, 81, 0.55);
   }
 }
 
-/* Textura sutil tipo estadio / Broadcast Sport-Tech para el fondo */
+/* Textura sutil tipo estadio */
 .arena-grid-overlay {
   background-image:
-    linear-gradient(to right, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-  background-size: 40px 40px;
-  mask-image: radial-gradient(ellipse 85% 65% at 50% 8%, black 15%, transparent 90%);
-  -webkit-mask-image: radial-gradient(ellipse 85% 65% at 50% 8%, black 15%, transparent 90%);
+    linear-gradient(to right, rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask-image: radial-gradient(ellipse 85% 65% at 50% 10%, black 20%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 85% 65% at 50% 10%, black 20%, transparent 90%);
 }
 
-/* Superficies Matte Slate & Glass Sport-Tech */
+.dark .arena-grid-overlay {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+}
+
+/* Patrón clásico de club / cancha de polvo de ladrillo */
+.classic .arena-grid-overlay {
+  background-image:
+    radial-gradient(rgba(27, 67, 50, 0.09) 1.25px, transparent 1.25px),
+    linear-gradient(135deg, rgba(200, 109, 81, 0.035) 25%, transparent 25%, transparent 50%, rgba(200, 109, 81, 0.035) 50%, rgba(200, 109, 81, 0.035) 75%, transparent 75%, transparent);
+  background-size: 26px 26px, 52px 52px;
+  mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, black 30%, transparent 95%);
+  -webkit-mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, black 30%, transparent 95%);
+}
+
+/* Superficie principal de tarjetas adaptable a los 3 temas */
 .glass-card {
   background: var(--glass-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--glass-border);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+}
+
+.classic .glass-card {
+  border-width: 1.5px;
 }
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
 
-/* Podios metálicos Sport-Tech sobre Matte Slate */
 .podium-gold {
-  background: linear-gradient(135deg, rgba(250, 204, 21, 0.2), rgba(234, 179, 8, 0.06));
-  border-color: rgba(250, 204, 21, 0.42);
-  box-shadow: inset 0 1px 0 rgba(254, 240, 138, 0.22), 0 0 28px -8px rgba(250, 204, 21, 0.35);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.22), rgba(245, 158, 11, 0.08));
+  border-color: rgba(245, 158, 11, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3), 0 0 24px -6px rgba(245, 158, 11, 0.32);
 }
 
 .podium-silver {
-  background: linear-gradient(135deg, rgba(226, 232, 240, 0.18), rgba(148, 163, 184, 0.05));
-  border-color: rgba(203, 213, 225, 0.36);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 24px -8px rgba(203, 213, 225, 0.25);
+  background: linear-gradient(135deg, rgba(203, 213, 225, 0.25), rgba(148, 163, 184, 0.08));
+  border-color: rgba(148, 163, 184, 0.45);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 0 20px -6px rgba(148, 163, 184, 0.28);
 }
 
 .podium-bronze {
-  background: linear-gradient(135deg, rgba(251, 146, 60, 0.2), rgba(234, 88, 12, 0.06));
-  border-color: rgba(251, 146, 60, 0.4);
-  box-shadow: inset 0 1px 0 rgba(254, 215, 170, 0.2), 0 0 24px -8px rgba(251, 146, 60, 0.28);
+  background: linear-gradient(135deg, rgba(251, 146, 60, 0.22), rgba(234, 88, 12, 0.08));
+  border-color: rgba(249, 115, 22, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 20px -6px rgba(249, 115, 22, 0.28);
 }
 
 @keyframes shimmer-slide {
@@ -142,15 +206,37 @@
 .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.04) 25%,
-    rgba(255, 255, 255, 0.1) 50%,
-    rgba(255, 255, 255, 0.04) 75%
+    rgba(148, 163, 184, 0.14) 25%,
+    rgba(148, 163, 184, 0.28) 50%,
+    rgba(148, 163, 184, 0.14) 75%
   );
   background-size: 200% 100%;
   animation: shimmer-slide 1.4s infinite linear;
 }
 
-/* Adaptación global Sport-Tech para componentes aún en migración */
+.dark .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.11) 50%,
+    rgba(255, 255, 255, 0.04) 75%
+  );
+  background-size: 200% 100%;
+}
+
+.classic .skeleton-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(27, 67, 50, 0.07) 25%,
+    rgba(200, 109, 81, 0.14) 50%,
+    rgba(27, 67, 50, 0.07) 75%
+  );
+  background-size: 200% 100%;
+}
+
+/* =========================================================
+   ADAPTACIÓN AUTOMÁTICA PARA MODO OSCURO (SPORT-TECH)
+   ========================================================= */
 .dark .bg-white {
   background-color: #141923;
 }
@@ -228,7 +314,6 @@
   color: #FFFFFF;
 }
 
-/* Badges y estados semánticos Sport-Tech */
 .dark .bg-emerald-50,
 .dark .bg-emerald-50\/40,
 .dark .bg-emerald-50\/50,
@@ -305,4 +390,108 @@
 }
 .dark .text-orange-800 {
   color: #FDBA74;
+}
+
+/* =========================================================
+   ADAPTACIÓN AUTOMÁTICA PARA MODO CLÁSICO (CLUB VINTAGE)
+   ========================================================= */
+.classic .bg-white {
+  background-color: #FFFBF4;
+}
+
+.classic .bg-white\/95,
+.classic .bg-white\/90,
+.classic .bg-white\/80 {
+  background-color: rgba(255, 251, 244, 0.92);
+}
+
+.classic .bg-slate-50,
+.classic .bg-slate-50\/70,
+.classic .bg-slate-50\/80,
+.classic .bg-slate-50\/90 {
+  background-color: #F2E9DA;
+}
+
+.classic .bg-slate-100 {
+  background-color: #EAE0CE;
+}
+
+.classic .bg-slate-200 {
+  background-color: #DDD0BA;
+}
+
+.classic .border-slate-200,
+.classic .border-slate-200\/80,
+.classic .border-slate-300 {
+  border-color: rgba(27, 67, 50, 0.16);
+}
+
+.classic .border-slate-100 {
+  border-color: rgba(27, 67, 50, 0.1);
+}
+
+.classic .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+.classic .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: rgba(27, 67, 50, 0.12);
+}
+
+.classic .text-slate-900 {
+  color: #1F2A24;
+}
+
+.classic .text-slate-800 {
+  color: #28362F;
+}
+
+.classic .text-slate-700 {
+  color: #3A4B42;
+}
+
+.classic .text-slate-600 {
+  color: #54645B;
+}
+
+.classic .text-slate-500 {
+  color: #6B7A71;
+}
+
+.classic .bg-emerald-50,
+.classic .bg-emerald-50\/40,
+.classic .bg-emerald-50\/50,
+.classic .bg-emerald-50\/80 {
+  background-color: rgba(27, 67, 50, 0.08);
+}
+
+.classic .bg-emerald-100 {
+  background-color: rgba(27, 67, 50, 0.14);
+}
+
+.classic .border-emerald-200,
+.classic .border-emerald-300 {
+  border-color: rgba(27, 67, 50, 0.28);
+}
+
+.classic .text-emerald-700,
+.classic .text-emerald-800,
+.classic .text-emerald-600 {
+  color: #1B4332;
+}
+
+.classic .bg-emerald-600,
+.classic .bg-emerald-500 {
+  background-color: #1B4332;
+}
+
+.classic .bg-sky-50,
+.classic .bg-sky-100 {
+  background-color: rgba(200, 109, 81, 0.12);
+}
+
+.classic .border-sky-200 {
+  border-color: rgba(200, 109, 81, 0.32);
+}
+
+.classic .text-sky-700,
+.classic .text-sky-800 {
+  color: #A44E35;
 }

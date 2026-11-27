@@ -63,21 +63,21 @@ export function ToastProvider({ children }) {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -10, scale: 0.94 }}
                     transition={{ type: 'spring', stiffness: 420, damping: 28 }}
-                    className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border bg-[#141923]/95 px-3.5 py-2.5 text-xs font-bold text-white shadow-2xl backdrop-blur-xl ${
+                    className={`pointer-events-auto flex w-full max-w-sm items-center gap-3 rounded-2xl border bg-white/95 px-3.5 py-2.5 text-xs font-bold text-slate-900 shadow-xl backdrop-blur-xl dark:bg-[#141923]/95 dark:text-white classic:bg-[#FFFBF4]/95 classic:text-[#1F2A24] classic:shadow-[0_3px_0_rgba(27,67,50,0.14)] ${
                       isErr
-                        ? 'border-rose-500/40'
+                        ? 'border-rose-300/90 dark:border-rose-500/40 classic:border-[#C86D51]'
                         : isInfo
-                        ? 'border-[#2563EB]/45'
-                        : 'border-[#CCFF00]/35'
+                        ? 'border-sky-300/90 dark:border-[#2563EB]/45 classic:border-[#D4A03E]'
+                        : 'border-emerald-300/90 dark:border-[#CCFF00]/35 classic:border-[#1B4332]/40'
                     }`}
                   >
                     <div
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-xl ${
                         isErr
-                          ? 'bg-rose-500/15 text-rose-400'
+                          ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/15 dark:text-rose-400 classic:bg-[#C86D51]/15 classic:text-[#A44E35]'
                           : isInfo
-                          ? 'bg-[#2563EB]/20 text-blue-400'
-                          : 'bg-[#CCFF00]/15 text-[#CCFF00]'
+                          ? 'bg-sky-100 text-sky-600 dark:bg-[#2563EB]/20 dark:text-blue-400 classic:bg-[#D4A03E]/20 classic:text-[#8F651A]'
+                          : 'bg-emerald-100 text-emerald-600 dark:bg-[#CCFF00]/15 dark:text-[#CCFF00] classic:bg-[#1B4332]/15 classic:text-[#1B4332]'
                       }`}
                     >
                       {isErr ? (
@@ -89,14 +89,12 @@ export function ToastProvider({ children }) {
                       )}
                     </div>
 
-                    <span className="flex-1 leading-snug text-slate-100">
-                      {t.message}
-                    </span>
+                    <span className="flex-1 leading-snug">{t.message}</span>
 
                     <button
                       type="button"
                       onClick={() => removeToast(t.id)}
-                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-white/10 hover:text-white"
+                      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-white/10 dark:hover:text-white"
                       aria-label="Cerrar notificación"
                     >
                       <X className="h-3.5 w-3.5" />
