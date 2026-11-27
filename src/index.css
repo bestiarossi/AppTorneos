@@ -45,22 +45,22 @@
     color-scheme: dark;
   }
 
-  /* MODO CLÁSICO (Club Vintage — Pergamino, Bosque & Terracota) */
+  /* MODO CLÁSICO (Club Retro — Arena Kraft, Bosque Profundo, Terracota & Ocre) */
   .classic {
-    --app-bg: #F5EFE4;
-    --app-surface: #FFFBF4;
-    --app-surface-2: #EFE6D5;
-    --app-text: #1F2A24;
-    --app-muted: #5F6B61;
-    --app-border: rgba(27, 67, 50, 0.16);
-    --accent-primary: #1B4332;
-    --accent-primary-text: #FBF7EE;
-    --accent-secondary: #C86D51;
-    --accent-gold: #D4A03E;
-    --glass-bg: rgba(255, 251, 244, 0.92);
-    --glass-border: rgba(27, 67, 50, 0.18);
-    --glass-highlight: rgba(255, 255, 255, 0.9);
-    --glass-shadow: 0 4px 0 rgba(27, 67, 50, 0.1), 0 14px 28px -12px rgba(27, 67, 50, 0.14);
+    --app-bg: #E6D6BC;
+    --app-surface: #FBF5E8;
+    --app-surface-2: #EFE2CC;
+    --app-text: #163228;
+    --app-muted: #4C6358;
+    --app-border: rgba(22, 50, 40, 0.24);
+    --accent-primary: #163228;
+    --accent-primary-text: #FBF5E8;
+    --accent-secondary: #C86849;
+    --accent-gold: #D9A441;
+    --glass-bg: #FBF5E8;
+    --glass-border: #163228;
+    --glass-highlight: rgba(255, 255, 255, 0.75);
+    --glass-shadow: 4px 4px 0px rgba(22, 50, 40, 0.85);
     color-scheme: light;
   }
 
@@ -124,11 +124,11 @@
   }
 
   .classic ::-webkit-scrollbar-thumb {
-    background: rgba(27, 67, 50, 0.28);
+    background: rgba(22, 50, 40, 0.35);
   }
 
   .classic ::-webkit-scrollbar-thumb:hover {
-    background: rgba(200, 109, 81, 0.55);
+    background: rgba(200, 104, 73, 0.7);
   }
 }
 
@@ -148,14 +148,33 @@
     linear-gradient(to bottom, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
 }
 
-/* Patrón clásico de club / cancha de polvo de ladrillo */
+/* Patrón clásico de club / papel deportivo retro */
 .classic .arena-grid-overlay {
   background-image:
-    radial-gradient(rgba(27, 67, 50, 0.09) 1.25px, transparent 1.25px),
-    linear-gradient(135deg, rgba(200, 109, 81, 0.035) 25%, transparent 25%, transparent 50%, rgba(200, 109, 81, 0.035) 50%, rgba(200, 109, 81, 0.035) 75%, transparent 75%, transparent);
-  background-size: 26px 26px, 52px 52px;
-  mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, black 30%, transparent 95%);
-  -webkit-mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, black 30%, transparent 95%);
+    radial-gradient(rgba(22, 50, 40, 0.13) 1.35px, transparent 1.35px),
+    repeating-linear-gradient(
+      -45deg,
+      rgba(200, 104, 73, 0.04) 0px,
+      rgba(200, 104, 73, 0.04) 12px,
+      transparent 12px,
+      transparent 28px
+    );
+  background-size: 24px 24px, 100% 100%;
+  mask-image: none;
+  -webkit-mask-image: none;
+}
+
+/* Franja tricolor retro del club (solo visible en Modo Clásico) */
+.classic-heritage-stripe {
+  background: linear-gradient(
+    90deg,
+    #C86849 0%,
+    #C86849 33.33%,
+    #D9A441 33.33%,
+    #D9A441 66.66%,
+    #2D6A4F 66.66%,
+    #2D6A4F 100%
+  );
 }
 
 /* Superficie principal de tarjetas adaptable a los 3 temas */
@@ -165,11 +184,14 @@
   -webkit-backdrop-filter: blur(18px);
   border: 1px solid var(--glass-border);
   box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
-  transition: background-color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease, transform 0.2s ease;
+  transition: background-color 0.25s ease, border-color 0.25s ease, box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .classic .glass-card {
-  border-width: 1.5px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: 2px solid #163228;
+  box-shadow: 4px 4px 0px rgba(22, 50, 40, 0.85);
 }
 
 .tabular-nums {
@@ -192,6 +214,24 @@
   background: linear-gradient(135deg, rgba(251, 146, 60, 0.22), rgba(234, 88, 12, 0.08));
   border-color: rgba(249, 115, 22, 0.42);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), 0 0 20px -6px rgba(249, 115, 22, 0.28);
+}
+
+.classic .podium-gold {
+  background: linear-gradient(135deg, #F6E2B3, #EED08B);
+  border: 2px solid #163228;
+  box-shadow: 3px 3px 0px #163228;
+}
+
+.classic .podium-silver {
+  background: linear-gradient(135deg, #E8E5DC, #D6D1C4);
+  border: 2px solid #163228;
+  box-shadow: 3px 3px 0px #163228;
+}
+
+.classic .podium-bronze {
+  background: linear-gradient(135deg, #EBC4B1, #DFAB93);
+  border: 2px solid #163228;
+  box-shadow: 3px 3px 0px #163228;
 }
 
 @keyframes shimmer-slide {
@@ -227,9 +267,9 @@
 .classic .skeleton-shimmer {
   background: linear-gradient(
     90deg,
-    rgba(27, 67, 50, 0.07) 25%,
-    rgba(200, 109, 81, 0.14) 50%,
-    rgba(27, 67, 50, 0.07) 75%
+    rgba(22, 50, 40, 0.08) 25%,
+    rgba(200, 104, 73, 0.18) 50%,
+    rgba(22, 50, 40, 0.08) 75%
   );
   background-size: 200% 100%;
 }
@@ -393,105 +433,120 @@
 }
 
 /* =========================================================
-   ADAPTACIÓN AUTOMÁTICA PARA MODO CLÁSICO (CLUB VINTAGE)
+   ADAPTACIÓN AUTOMÁTICA PARA MODO CLÁSICO (CLUB RETRO)
    ========================================================= */
 .classic .bg-white {
-  background-color: #FFFBF4;
+  background-color: #FBF5E8;
 }
 
 .classic .bg-white\/95,
 .classic .bg-white\/90,
 .classic .bg-white\/80 {
-  background-color: rgba(255, 251, 244, 0.92);
+  background-color: rgba(251, 245, 232, 0.96);
 }
 
 .classic .bg-slate-50,
 .classic .bg-slate-50\/70,
 .classic .bg-slate-50\/80,
 .classic .bg-slate-50\/90 {
-  background-color: #F2E9DA;
+  background-color: #EFE2CC;
 }
 
 .classic .bg-slate-100 {
-  background-color: #EAE0CE;
+  background-color: #E5D4B7;
 }
 
 .classic .bg-slate-200 {
-  background-color: #DDD0BA;
+  background-color: #D6C19F;
 }
 
 .classic .border-slate-200,
 .classic .border-slate-200\/80,
 .classic .border-slate-300 {
-  border-color: rgba(27, 67, 50, 0.16);
+  border-color: rgba(22, 50, 40, 0.26);
 }
 
 .classic .border-slate-100 {
-  border-color: rgba(27, 67, 50, 0.1);
+  border-color: rgba(22, 50, 40, 0.14);
 }
 
 .classic .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
 .classic .divide-slate-200 > :not([hidden]) ~ :not([hidden]) {
-  border-color: rgba(27, 67, 50, 0.12);
+  border-color: rgba(22, 50, 40, 0.16);
 }
 
 .classic .text-slate-900 {
-  color: #1F2A24;
+  color: #163228;
 }
 
 .classic .text-slate-800 {
-  color: #28362F;
+  color: #1E4033;
 }
 
 .classic .text-slate-700 {
-  color: #3A4B42;
+  color: #2D4D40;
 }
 
 .classic .text-slate-600 {
-  color: #54645B;
+  color: #496357;
 }
 
 .classic .text-slate-500 {
-  color: #6B7A71;
+  color: #5F776B;
 }
 
 .classic .bg-emerald-50,
 .classic .bg-emerald-50\/40,
 .classic .bg-emerald-50\/50,
 .classic .bg-emerald-50\/80 {
-  background-color: rgba(27, 67, 50, 0.08);
+  background-color: rgba(22, 50, 40, 0.1);
 }
 
 .classic .bg-emerald-100 {
-  background-color: rgba(27, 67, 50, 0.14);
+  background-color: rgba(22, 50, 40, 0.16);
 }
 
 .classic .border-emerald-200,
 .classic .border-emerald-300 {
-  border-color: rgba(27, 67, 50, 0.28);
+  border-color: #163228;
 }
 
 .classic .text-emerald-700,
 .classic .text-emerald-800,
 .classic .text-emerald-600 {
-  color: #1B4332;
+  color: #163228;
 }
 
 .classic .bg-emerald-600,
 .classic .bg-emerald-500 {
-  background-color: #1B4332;
+  background-color: #163228;
 }
 
 .classic .bg-sky-50,
 .classic .bg-sky-100 {
-  background-color: rgba(200, 109, 81, 0.12);
+  background-color: rgba(200, 104, 73, 0.16);
 }
 
 .classic .border-sky-200 {
-  border-color: rgba(200, 109, 81, 0.32);
+  border-color: rgba(200, 104, 73, 0.45);
 }
 
 .classic .text-sky-700,
 .classic .text-sky-800 {
-  color: #A44E35;
+  color: #9E452B;
+}
+
+.classic .bg-amber-50,
+.classic .bg-amber-100 {
+  background-color: rgba(217, 164, 65, 0.22);
+}
+
+.classic .border-amber-200,
+.classic .border-amber-300 {
+  border-color: rgba(161, 111, 24, 0.45);
+}
+
+.classic .text-amber-700,
+.classic .text-amber-800 {
+  color: #7D5310;
 }
