@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -10,8 +10,18 @@ import {
   Smartphone,
   Sun,
   Trophy,
+  Volume1,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react';
+import {
+  getSoundSettings,
+  initGlobalUiSounds,
+  playUiClickSound,
+  subscribeSoundSettings,
+  updateSoundSettings,
+} from '../utils/soundEffects';
 import Avatar from './Avatar';
 
 export default function Navbar({
@@ -29,8 +39,28 @@ export default function Navbar({
   const [isIosSafari, setIsIosSafari] = useState(false);
   const [showIosGuide, setShowIosGuide] = useState(false);
 
+  const [soundSettings, setSoundSettings] = useState(getSoundSettings);
+  const [soundMenuOpen, setSoundMenuOpen] = useState(false);
+  const soundMenuRef = useRef(null);
+
   const isDark = theme === 'dark';
   const isClassic = theme === 'classic';
+
+  useEffect(() => {
+    initGlobalUiSounds();
+    return subscribeSoundSettings(setSoundSettings);
+  }, []);
+
+  useEffect(() => {
+    if (!soundMenuOpen) return;
+    function handleOutside(e) {
+      if (soundMenuRef.current && !soundMenuRef.current.contains(e.target)) {
+        setSoundMenuOpen(false);
+      }
+    }
+    window.addEventListener('pointerdown', handleOutside);
+    return () => window.removeEventListener('pointerdown', handleOutside);
+  }, [soundMenuOpen]);
 
   useEffect(() => {
     const checkStandalone = () => {
@@ -94,10 +124,16 @@ export default function Navbar({
     ? { label: 'Clásico', next: 'Cambiar a modo Claro' }
     : { label: 'Claro', next: 'Cambiar a modo Oscuro' };
 
+  const isMuted = soundSettings.muted || soundSettings.volume <= 0;
+  const SoundIcon = isMuted
+    ? VolumeX
+    : soundSettings.volume < 0.45
+    ? Volume1
+    : Volume2;
+
   return (
     <>
       <header className="sticky top-0 z-30 border-b border-slate-200/85 bg-white/85 pt-[env(safe-area-inset-top)] backdrop-blur-xl transition-colors duration-300 dark:border-white/[0.08] dark:bg-[#141923]/90 classic:border-b-2 classic:border-[#143026] classic:bg-[#1E4638] classic:backdrop-blur-none">
-        {/* Franja tricolor heritage exclusiva del Modo Clásico */}
         {isClassic && (
           <div className="classic-heritage-stripe h-1.5 w-full" />
         )}
@@ -131,6 +167,95 @@ export default function Navbar({
           </motion.button>
 
           <div className="flex items-center gap-1.5 sm:gap-2">
+            {/* Control de Sonido / Volumen / Mute */}
+            <div ref={soundMenuRef} className="relative">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={() => setSoundMenuOpen((prev) => !prev)}
+                aria-label="Configurar efectos de sonido"
+                title="Efectos de sonido"
+                className={`inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-xl border px-2.5 py-2 text-xs font-bold transition ${
+                  isMuted
+                    ? 'border-slate-200/90 bg-slate-100/80 text-slate-400 dark:border-white/[0.08] dark:bg-white/5 dark:text-slate-500 classic:border-2 classic:border-[#FBF5E8]/30 classic:bg-[#285947] classic:text-[#B9CFC5]'
+                    : 'border-slate-200/90 bg-slate-100/80 text-emerald-600 hover:bg-white dark:border-white/[0.08] dark:bg-white/5 dark:text-[#CCFF00] dark:hover:bg-white/10 classic:border-2 classic:border-[#D9A441] classic:bg-[#285947] classic:text-[#E6C782]'
+                }`}
+              >
+                <SoundIcon className="h-4 w-4" />
+              </motion.button>
+
+              <AnimatePresence>
+                {soundMenuOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 6, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                    className="glass-card absolute right-0 mt-2 w-56 rounded-2xl p-3.5 shadow-2xl"
+                  >
+                    <div className="mb-2.5 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-extrabold tracking-wider text-slate-700 uppercase dark:text-slate-200 classic:text-[#1E4638]">
+                        Sonidos UI
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const nextMuted = !soundSettings.muted;
+                          updateSoundSettings({ muted: nextMuted });
+                          if (!nextMuted) playUiClickSound(640);
+                        }}
+                        className={`rounded-lg px-2 py-1 text-[10px] font-extrabold uppercase transition ${
+                          isMuted
+                            ? 'bg-rose-500/15 text-rose-600 dark:text-rose-300'
+                            : 'bg-emerald-500/15 text-emerald-700 dark:bg-[#CCFF00]/20 dark:text-[#CCFF00] classic:bg-[#1E4638] classic:text-[#FBF5E8]'
+                        }`}
+                      >
+                        {isMuted ? 'Silenciado' : 'Activo'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-2.5">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          updateSoundSettings({ muted: !soundSettings.muted })
+                        }
+                        className="text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white"
+                        aria-label={isMuted ? 'Activar sonido' : 'Silenciar'}
+                      >
+                        <SoundIcon className="h-4 w-4" />
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={5}
+                        value={
+                          soundSettings.muted
+                            ? 0
+                            : Math.round(soundSettings.volume * 100)
+                        }
+                        onChange={(e) => {
+                          const val = Number(e.target.value) / 100;
+                          updateSoundSettings({
+                            volume: val,
+                            muted: val <= 0,
+                          });
+                        }}
+                        onPointerUp={() => playUiClickSound(600)}
+                        className="h-1.5 flex-1 cursor-pointer accent-emerald-600 dark:accent-[#CCFF00] classic:accent-[#D46F4D]"
+                      />
+                      <span className="w-8 text-right font-mono text-[11px] font-bold text-slate-600 tabular-nums dark:text-slate-300 classic:text-[#1E4638]">
+                        {soundSettings.muted
+                          ? '0%'
+                          : `${Math.round(soundSettings.volume * 100)}%`}
+                      </span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
             {onToggleTheme && (
               <motion.button
                 type="button"

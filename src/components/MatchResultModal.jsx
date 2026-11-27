@@ -6,6 +6,8 @@ import {
   Check,
   Clock,
   Loader2,
+  Maximize2,
+  Minimize2,
   Minus,
   Pause,
   Play,
@@ -18,6 +20,10 @@ import {
   X,
 } from 'lucide-react';
 import { resolveParticipantAvatar } from '../utils/avatarUpload';
+import {
+  playScoreSound,
+  playWhistleSound,
+} from '../utils/soundEffects';
 import { getSingleMatchWinner } from '../utils/tournamentEngine';
 import Avatar from './Avatar';
 
@@ -52,10 +58,32 @@ export default function MatchResultModal({
   // Estado del Marcador en Vivo + Cronómetro
   const [clockType, setClockType] = useState('stopwatch'); // 'stopwatch' | 'countdown'
   const [countdownMinutes, setCountdownMinutes] = useState(10);
+  const [customMinutesInput, setCustomMinutesInput] = useState('10');
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [clockRunning, setClockRunning] = useState(false);
   const [liveEvents, setLiveEvents] = useState([]);
+  const [isNativeFullscreen, setIsNativeFullscreen] = useState(false);
   const clockIntervalRef = useRef(null);
+
+  useEffect(() => {
+    function handleFsChange() {
+      setIsNativeFullscreen(Boolean(document.fullscreenElement));
+    }
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  async function toggleNativeFullscreen() {
+    try {
+      if (!document.fullscreenElement) {
+        await document.documentElement.requestFullscreen?.();
+      } else {
+        await document.exitFullscreen?.();
+      }
+    } catch {
+      // ignore
+    }
+  }
 
   useEffect(() => {
     if (!isOpen || !match) return;
@@ -121,9 +149,11 @@ export default function MatchResultModal({
     clockIntervalRef.current = setInterval(() => {
       setElapsedSeconds((prev) => {
         const next = prev + 1;
-        if (clockType === 'countdown' && next >= countdownMinutes * 60) {
+        const limitSecs = Math.max(1, Number(countdownMinutes) || 1) * 60;
+        if (clockType === 'countdown' && next >= limitSecs) {
           setClockRunning(false);
-          return countdownMinutes * 60;
+          playWhistleSound();
+          return limitSecs;
         }
         return next;
       });
@@ -248,7 +278,6 @@ export default function MatchResultModal({
       }
     }
   } else if (match && !isKnockout && leagueTiebreakerEnabled) {
-    // Preparado para Liga con desempate (3 pts ganar / 2 pts ganar desempate / 1 pt perder desempate)
     if (isNumericMode && hasValidExactInputs && parsedA === parsedB) {
       needsTiebreaker = true;
     } else if (mode === 'winner_only' && selectedWinnerOnly === 'draw') {
@@ -272,6 +301,7 @@ export default function MatchResultModal({
     }
 
     if (delta > 0) {
+      playScoreSound();
       const stamp = formatClock(elapsedSeconds);
       const who = side === 'a' ? playerA?.name || 'Local' : playerB?.name || 'Visitante';
       setLiveEvents((prev) => [
@@ -299,13 +329,31 @@ export default function MatchResultModal({
     setElapsedSeconds(0);
   }
 
-  const totalCountdownSecs = countdownMinutes * 60;
+  function handleCustomMinutesChange(rawVal) {
+    setCustomMinutesInput(rawVal);
+    const parsed = Number.parseFloat(rawVal);
+    if (!Number.isNaN(parsed) && parsed > 0) {
+      const clamped = Math.min(240, Math.max(1, parsed));
+      setCountdownMinutes(clamped);
+      setElapsedSeconds(0);
+      setClockRunning(false);
+    }
+  }
+
+  const totalCountdownSecs = Math.max(1, Number(countdownMinutes) || 1) * 60;
   const displayedClockSeconds =
     clockType === 'countdown'
       ? Math.max(0, totalCountdownSecs - elapsedSeconds)
       : elapsedSeconds;
   const isTimeUp =
     clockType === 'countdown' && elapsedSeconds >= totalCountdownSecs;
+
+  function handleSafeClose() {
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    onClose();
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -413,7 +461,7 @@ export default function MatchResultModal({
       setClockRunning(false);
       try {
         await onSave({ primaryUpdate, siblingUpdate });
-        onClose();
+        handleSafeClose();
       } catch (err) {
         setError(err?.message || 'No se pudo guardar el resultado.');
       } finally {
@@ -491,7 +539,7 @@ export default function MatchResultModal({
     setSaving(true);
     try {
       await onSave({ primaryUpdate, siblingUpdate });
-      onClose();
+      handleSafeClose();
     } catch (err) {
       setError(err?.message || 'No se pudo guardar el resultado.');
     } finally {
@@ -505,7 +553,7 @@ export default function MatchResultModal({
     setSaving(true);
     try {
       await onReset(match);
-      onClose();
+      handleSafeClose();
     } catch (err) {
       setError(err?.message || 'No se pudo resetear el partido.');
     } finally {
@@ -520,6 +568,8 @@ export default function MatchResultModal({
     ? participantMap.get(siblingLeg.participant_b_id)
     : null;
 
+  const isLiveFullscreen = mode === 'live';
+
   if (typeof document === 'undefined') return null;
 
   return createPortal(
@@ -531,23 +581,34 @@ export default function MatchResultModal({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
-          className="fixed inset-0 z-[100] flex items-end justify-center bg-slate-950/65 p-0 backdrop-blur-xs sm:items-center sm:p-4"
+          className={`fixed inset-0 z-[100] flex justify-center bg-slate-950/75 backdrop-blur-sm ${
+            isLiveFullscreen
+              ? 'items-stretch p-0'
+              : 'items-end p-0 sm:items-center sm:p-4'
+          }`}
           onClick={(e) => {
-            if (e.target === e.currentTarget && !saving) onClose();
+            if (e.target === e.currentTarget && !saving && !isLiveFullscreen) {
+              handleSafeClose();
+            }
           }}
         >
           <motion.div
             key="match-result-dialog"
-            initial={{ opacity: 0, y: 24 }}
+            layout
+            initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 20 }}
+            exit={{ opacity: 0, y: 16 }}
             transition={{ type: 'spring', stiffness: 400, damping: 34 }}
-            className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-3xl border border-slate-200/90 bg-white shadow-2xl sm:rounded-2xl dark:border-white/[0.08] dark:bg-[#141923] classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8]"
+            className={`flex flex-col overflow-hidden bg-white shadow-2xl dark:bg-[#141923] classic:bg-[#FBF5E8] ${
+              isLiveFullscreen
+                ? 'h-[100dvh] w-[100dvw] max-w-none rounded-none border-0'
+                : 'max-h-[92dvh] w-full max-w-lg rounded-t-3xl border border-slate-200/90 sm:rounded-2xl dark:border-white/[0.08] classic:border-2 classic:border-[#1E4638]'
+            }`}
           >
             {/* Header fijo */}
-            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3.5 sm:px-5 sm:py-4 dark:border-white/[0.08] classic:border-b-2 classic:border-[#1E4638] classic:bg-[#1E4638]">
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200/80 px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-6 dark:border-white/[0.08] classic:border-b-2 classic:border-[#1E4638] classic:bg-[#1E4638]">
               <div className="flex min-w-0 items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 dark:bg-[#CCFF00]/15 dark:bg-none dark:text-[#CCFF00] classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8]">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500/20 to-teal-500/20 text-emerald-600 sm:h-10 sm:w-10 dark:bg-[#CCFF00]/15 dark:bg-none dark:text-[#CCFF00] classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8]">
                   {mode === 'live' ? (
                     <Radio className="h-5 w-5 animate-pulse" />
                   ) : (
@@ -555,9 +616,9 @@ export default function MatchResultModal({
                   )}
                 </div>
                 <div className="min-w-0">
-                  <h2 className="truncate text-base font-extrabold tracking-tight text-slate-900 uppercase dark:text-white classic:text-[#FBF5E8]">
+                  <h2 className="truncate text-sm font-extrabold tracking-tight text-slate-900 uppercase sm:text-base dark:text-white classic:text-[#FBF5E8]">
                     {mode === 'live'
-                      ? 'Marcador en Vivo'
+                      ? 'Tablero en Vivo'
                       : match.status === 'completed'
                       ? 'Editar resultado'
                       : 'Cargar resultado'}
@@ -573,132 +634,155 @@ export default function MatchResultModal({
                 </div>
               </div>
 
-              <button
-                type="button"
-                disabled={saving}
-                onClick={onClose}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white classic:text-[#FBF5E8] classic:hover:bg-[#285947]"
-                aria-label="Cerrar modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
+              <div className="flex shrink-0 items-center gap-1.5">
+                {isLiveFullscreen && (
+                  <button
+                    type="button"
+                    onClick={toggleNativeFullscreen}
+                    title="Pantalla completa"
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-slate-100/70 text-slate-600 transition hover:bg-slate-200/70 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 classic:border-[#FBF5E8]/30 classic:bg-[#285947] classic:text-[#FBF5E8]"
+                  >
+                    {isNativeFullscreen ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={saving}
+                  onClick={handleSafeClose}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-400 transition active:bg-slate-100 hover:bg-slate-100 hover:text-slate-600 disabled:opacity-50 dark:hover:bg-white/10 dark:hover:text-white classic:text-[#FBF5E8] classic:hover:bg-[#285947]"
+                  aria-label="Cerrar modal"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
 
             {/* Formulario scrolleable */}
             <form
               id="match-result-form"
               onSubmit={handleSubmit}
-              className="flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:space-y-5 sm:p-5"
+              className={`mx-auto flex w-full flex-1 flex-col overflow-y-auto overscroll-contain ${
+                isLiveFullscreen
+                  ? 'max-w-7xl justify-between gap-3 p-3 sm:p-6'
+                  : 'space-y-4 p-4 sm:space-y-5 sm:p-5'
+              }`}
             >
-              {isTwoLegKnockout && siblingLeg && (
-                <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2.5 text-xs text-slate-600 dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-slate-300">
-                  <span className="font-bold text-slate-800 dark:text-white">
-                    {siblingLeg.leg === 1 ? 'Ida:' : 'Vuelta:'}{' '}
-                  </span>
-                  {siblingLeg.status === 'completed' ? (
-                    siblingLeg.score_a !== null && siblingLeg.score_b !== null ? (
-                      <span>
-                        {siblingPlayerA?.name || 'Jugador A'}{' '}
-                        {siblingLeg.score_a} - {siblingLeg.score_b}{' '}
-                        {siblingPlayerB?.name || 'Jugador B'}
-                      </span>
+              {/* Barra superior de modos y contexto */}
+              <div className="mx-auto w-full max-w-lg space-y-3">
+                {isTwoLegKnockout && siblingLeg && (
+                  <div className="rounded-2xl border border-slate-200/80 bg-slate-50/80 px-3.5 py-2 text-center text-xs text-slate-600 dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-slate-300">
+                    <span className="font-bold text-slate-800 dark:text-white">
+                      {siblingLeg.leg === 1 ? 'Ida:' : 'Vuelta:'}{' '}
+                    </span>
+                    {siblingLeg.status === 'completed' ? (
+                      siblingLeg.score_a !== null && siblingLeg.score_b !== null ? (
+                        <span>
+                          {siblingPlayerA?.name || 'Jugador A'}{' '}
+                          {siblingLeg.score_a} - {siblingLeg.score_b}{' '}
+                          {siblingPlayerB?.name || 'Jugador B'}
+                        </span>
+                      ) : (
+                        <span>
+                          Ganador:{' '}
+                          {participantMap.get(getSingleMatchWinner(siblingLeg))
+                            ?.name || 'Definido'}
+                        </span>
+                      )
                     ) : (
-                      <span>
-                        Ganador:{' '}
-                        {participantMap.get(getSingleMatchWinner(siblingLeg))
-                          ?.name || 'Definido'}
-                      </span>
-                    )
-                  ) : (
-                    <span className="text-slate-400">Aún pendiente</span>
-                  )}
-                </div>
-              )}
-
-              {/* Selector de 3 modos: Exacto | En Vivo | Solo ganador */}
-              <div className="grid grid-cols-3 rounded-xl border border-slate-200/70 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('exact');
-                    setError('');
-                  }}
-                  className={`relative min-h-[40px] rounded-lg px-2 py-2 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
-                    mode === 'exact'
-                      ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                >
-                  {mode === 'exact' && (
-                    <motion.div
-                      layoutId="match-result-mode-pill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
-                    />
-                  )}
-                  <span className="relative z-10">Exacto</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleSwitchToLive}
-                  className={`relative inline-flex min-h-[40px] items-center justify-center gap-1 rounded-lg px-2 py-2 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
-                    mode === 'live'
-                      ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                >
-                  {mode === 'live' && (
-                    <motion.div
-                      layoutId="match-result-mode-pill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#D46F4D]"
-                    />
-                  )}
-                  <Timer className="relative z-10 h-3.5 w-3.5" />
-                  <span className="relative z-10">En Vivo</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMode('winner_only');
-                    setClockRunning(false);
-                    setError('');
-                  }}
-                  className={`relative min-h-[40px] rounded-lg px-2 py-2 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
-                    mode === 'winner_only'
-                      ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
-                  }`}
-                >
-                  {mode === 'winner_only' && (
-                    <motion.div
-                      layoutId="match-result-mode-pill"
-                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
-                    />
-                  )}
-                  <span className="relative z-10">Ganador</span>
-                </button>
-              </div>
-
-              <AnimatePresence>
-                {error && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6, height: 0 }}
-                    animate={{ opacity: 1, y: 0, height: 'auto' }}
-                    exit={{ opacity: 0, y: -6, height: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="overflow-hidden"
-                  >
-                    <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
-                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-                      <span>{error}</span>
-                    </div>
-                  </motion.div>
+                      <span className="text-slate-400">Aún pendiente</span>
+                    )}
+                  </div>
                 )}
-              </AnimatePresence>
+
+                <div className="grid grid-cols-3 rounded-xl border border-slate-200/70 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('exact');
+                      setError('');
+                    }}
+                    className={`relative min-h-[38px] rounded-lg px-2 py-1.5 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
+                      mode === 'exact'
+                        ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode === 'exact' && (
+                      <motion.div
+                        layoutId="match-result-mode-pill"
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
+                      />
+                    )}
+                    <span className="relative z-10">Exacto</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSwitchToLive}
+                    className={`relative inline-flex min-h-[38px] items-center justify-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
+                      mode === 'live'
+                        ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode === 'live' && (
+                      <motion.div
+                        layoutId="match-result-mode-pill"
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#D46F4D]"
+                      />
+                    )}
+                    <Timer className="relative z-10 h-3.5 w-3.5" />
+                    <span className="relative z-10">En Vivo</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMode('winner_only');
+                      setClockRunning(false);
+                      setError('');
+                    }}
+                    className={`relative min-h-[38px] rounded-lg px-2 py-1.5 text-[11px] font-extrabold tracking-wide uppercase transition-colors sm:text-xs ${
+                      mode === 'winner_only'
+                        ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
+                        : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white'
+                    }`}
+                  >
+                    {mode === 'winner_only' && (
+                      <motion.div
+                        layoutId="match-result-mode-pill"
+                        transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                        className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
+                      />
+                    )}
+                    <span className="relative z-10">Ganador</span>
+                  </button>
+                </div>
+
+                <AnimatePresence>
+                  {error && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, height: 0 }}
+                      animate={{ opacity: 1, y: 0, height: 'auto' }}
+                      exit={{ opacity: 0, y: -6, height: 0 }}
+                      transition={{ duration: 0.18 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
+                        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                        <span>{error}</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
               <AnimatePresence mode="wait">
                 {mode === 'live' ? (
@@ -708,201 +792,267 @@ export default function MatchResultModal({
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -6 }}
                     transition={{ duration: 0.16 }}
-                    className="space-y-4"
+                    className="flex flex-1 flex-col justify-center gap-3"
                   >
-                    {/* Reloj / Cronómetro Broadcast */}
-                    <div
-                      className={`rounded-2xl border p-4 text-center transition ${
-                        isTimeUp
-                          ? 'border-rose-400 bg-rose-950 text-white'
-                          : 'border-slate-800 bg-slate-900 text-white dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#1E4638]'
-                      }`}
-                    >
-                      <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2">
-                        <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5 text-[10px] font-extrabold uppercase">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setClockType('stopwatch');
-                              handleResetClock();
-                            }}
-                            className={`rounded-md px-2.5 py-1 transition ${
-                              clockType === 'stopwatch'
-                                ? 'bg-[#CCFF00] text-[#0B0E14] classic:bg-[#D9A441] classic:text-[#1E4638]'
-                                : 'text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            Libre
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setClockType('countdown');
-                              handleResetClock();
-                            }}
-                            className={`rounded-md px-2.5 py-1 transition ${
-                              clockType === 'countdown'
-                                ? 'bg-[#CCFF00] text-[#0B0E14] classic:bg-[#D9A441] classic:text-[#1E4638]'
-                                : 'text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            Temporizador
-                          </button>
+                    {/* En PC (lg:) y en Celular Horizontal (landscape:) arma 3 columnas: Local | Reloj Central | Visitante */}
+                    <div className="grid grid-cols-1 gap-3 lg:grid-cols-12 lg:items-stretch lg:gap-5 max-lg:landscape:grid-cols-12 max-lg:landscape:items-stretch max-lg:landscape:gap-2.5">
+                      {/* Reloj Central (primero en vertical, al medio en horizontal y PC) */}
+                      <div
+                        className={`flex flex-col justify-between rounded-2xl border p-3.5 text-center transition sm:p-5 lg:order-2 lg:col-span-4 max-lg:landscape:order-2 max-lg:landscape:col-span-4 max-lg:landscape:p-2.5 ${
+                          isTimeUp
+                            ? 'border-rose-400 bg-rose-950 text-white'
+                            : 'border-slate-800 bg-slate-900 text-white dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#1E4638]'
+                        }`}
+                      >
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="inline-flex rounded-lg border border-white/10 bg-white/5 p-0.5 text-[10px] font-extrabold uppercase">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClockType('stopwatch');
+                                handleResetClock();
+                              }}
+                              className={`rounded-md px-2.5 py-1 transition ${
+                                clockType === 'stopwatch'
+                                  ? 'bg-[#CCFF00] text-[#0B0E14] classic:bg-[#D9A441] classic:text-[#1E4638]'
+                                  : 'text-slate-300 hover:text-white'
+                              }`}
+                            >
+                              Libre
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClockType('countdown');
+                                handleResetClock();
+                              }}
+                              className={`rounded-md px-2.5 py-1 transition ${
+                                clockType === 'countdown'
+                                  ? 'bg-[#CCFF00] text-[#0B0E14] classic:bg-[#D9A441] classic:text-[#1E4638]'
+                                  : 'text-slate-300 hover:text-white'
+                              }`}
+                            >
+                              Temporizador
+                            </button>
+                          </div>
+
+                          {/* Selector de minutos: Presets + Input libre */}
+                          {clockType === 'countdown' && (
+                            <div className="flex flex-wrap items-center justify-center gap-1">
+                              {COUNTDOWN_PRESETS.map((m) => (
+                                <button
+                                  key={m}
+                                  type="button"
+                                  onClick={() => {
+                                    setCountdownMinutes(m);
+                                    setCustomMinutesInput(String(m));
+                                    setElapsedSeconds(0);
+                                    setClockRunning(false);
+                                  }}
+                                  className={`rounded-md px-2 py-1 font-mono text-[10px] font-bold transition ${
+                                    Number(countdownMinutes) === m
+                                      ? 'bg-white/20 text-[#CCFF00] classic:text-[#D9A441]'
+                                      : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                                  }`}
+                                >
+                                  {m}&apos;
+                                </button>
+                              ))}
+
+                              <div className="inline-flex items-center gap-1 rounded-md border border-white/15 bg-white/10 px-1.5 py-0.5">
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={240}
+                                  value={customMinutesInput}
+                                  onChange={(e) =>
+                                    handleCustomMinutesChange(e.target.value)
+                                  }
+                                  aria-label="Minutos personalizados"
+                                  className="w-10 bg-transparent text-center font-mono text-xs font-black text-white focus:outline-none"
+                                />
+                                <span className="text-[10px] font-bold text-slate-300">
+                                  min
+                                </span>
+                              </div>
+                            </div>
+                          )}
                         </div>
 
-                        {clockType === 'countdown' && (
-                          <div className="flex items-center gap-1">
-                            {COUNTDOWN_PRESETS.map((m) => (
-                              <button
-                                key={m}
-                                type="button"
-                                onClick={() => {
-                                  setCountdownMinutes(m);
-                                  setElapsedSeconds(0);
-                                  setClockRunning(false);
-                                }}
-                                className={`rounded-md px-2 py-1 font-mono text-[10px] font-bold transition ${
-                                  countdownMinutes === m
-                                    ? 'bg-white/20 text-[#CCFF00] classic:text-[#D9A441]'
-                                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
-                                }`}
-                              >
-                                {m}&apos;
-                              </button>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="my-2 flex flex-col items-center">
-                        <span
-                          className={`font-mono text-4xl font-black tracking-tight tabular-nums sm:text-5xl ${
-                            isTimeUp
-                              ? 'animate-pulse text-rose-300'
-                              : clockRunning
-                              ? 'text-[#CCFF00] classic:text-[#D9A441]'
-                              : 'text-white'
-                          }`}
-                        >
-                          {formatClock(displayedClockSeconds)}
-                        </span>
-                        {isTimeUp && (
-                          <span className="mt-1 rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-black tracking-wider uppercase">
-                            ¡Tiempo cumplido!
+                        <div className="my-2 flex flex-col items-center justify-center">
+                          <span
+                            className={`font-mono text-5xl font-black tracking-tight tabular-nums sm:text-6xl max-lg:landscape:text-4xl ${
+                              isTimeUp
+                                ? 'animate-pulse text-rose-300'
+                                : clockRunning
+                                ? 'text-[#CCFF00] classic:text-[#D9A441]'
+                                : 'text-white'
+                            }`}
+                          >
+                            {formatClock(displayedClockSeconds)}
                           </span>
-                        )}
-                      </div>
-
-                      <div className="mt-3 flex items-center justify-center gap-2">
-                        <motion.button
-                          type="button"
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => {
-                            if (isTimeUp) {
-                              setElapsedSeconds(0);
-                              setClockRunning(true);
-                            } else {
-                              setClockRunning((prev) => !prev);
-                            }
-                          }}
-                          className={`inline-flex min-h-[38px] items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-black tracking-wider uppercase transition ${
-                            clockRunning
-                              ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
-                              : 'bg-[#CCFF00] text-[#0B0E14] hover:bg-[#d9ff33] classic:bg-[#D46F4D] classic:text-[#FBF5E8]'
-                          }`}
-                        >
-                          {clockRunning ? (
-                            <>
-                              <Pause className="h-3.5 w-3.5" />
-                              <span>Pausar</span>
-                            </>
-                          ) : (
-                            <>
-                              <Play className="h-3.5 w-3.5" />
-                              <span>{elapsedSeconds > 0 ? 'Reanudar' : 'Iniciar'}</span>
-                            </>
+                          {isTimeUp && (
+                            <span className="mt-1 rounded-full bg-rose-500 px-2.5 py-0.5 text-[10px] font-black tracking-wider uppercase">
+                              ¡Tiempo cumplido!
+                            </span>
                           )}
-                        </motion.button>
+                        </div>
 
-                        <motion.button
-                          type="button"
-                          whileTap={{ scale: 0.95 }}
-                          onClick={handleResetClock}
-                          className="inline-flex min-h-[38px] items-center gap-1 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/15"
-                        >
-                          <RotateCcw className="h-3.5 w-3.5" />
-                          <span>00:00</span>
-                        </motion.button>
+                        <div className="flex items-center justify-center gap-2">
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => {
+                              if (isTimeUp) {
+                                setElapsedSeconds(0);
+                                setClockRunning(true);
+                              } else {
+                                setClockRunning((prev) => !prev);
+                              }
+                            }}
+                            className={`inline-flex min-h-[40px] items-center gap-1.5 rounded-xl px-4 py-1.5 text-xs font-black tracking-wider uppercase transition ${
+                              clockRunning
+                                ? 'bg-amber-400 text-slate-950 hover:bg-amber-300'
+                                : 'bg-[#CCFF00] text-[#0B0E14] hover:bg-[#d9ff33] classic:bg-[#D46F4D] classic:text-[#FBF5E8]'
+                            }`}
+                          >
+                            {clockRunning ? (
+                              <>
+                                <Pause className="h-3.5 w-3.5" />
+                                <span>Pausar</span>
+                              </>
+                            ) : (
+                              <>
+                                <Play className="h-3.5 w-3.5" />
+                                <span>
+                                  {elapsedSeconds > 0 ? 'Seguir' : 'Iniciar'}
+                                </span>
+                              </>
+                            )}
+                          </motion.button>
+
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.95 }}
+                            onClick={handleResetClock}
+                            className="inline-flex min-h-[40px] items-center gap-1 rounded-xl border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-bold text-slate-200 hover:bg-white/15"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            <span>00:00</span>
+                          </motion.button>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Tablero táctil +1 / -1 */}
-                    <div className="grid grid-cols-2 gap-3">
-                      {[
-                        { side: 'a', player: playerA, score: parsedA ?? 0 },
-                        { side: 'b', player: playerB, score: parsedB ?? 0 },
-                      ].map(({ side, player, score }) => (
-                        <div
-                          key={side}
-                          className="flex flex-col items-center rounded-2xl border border-slate-200/90 bg-slate-50/80 p-3.5 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]"
-                        >
+                      {/* Tarjeta Jugador A (Izquierda en horizontal / PC) */}
+                      <div className="flex flex-col items-center justify-between rounded-2xl border border-slate-200/90 bg-slate-50/85 p-4 lg:order-1 lg:col-span-4 max-lg:landscape:order-1 max-lg:landscape:col-span-4 max-lg:landscape:p-3 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
+                        <div className="flex flex-col items-center">
                           <Avatar
-                            name={player?.name || (side === 'a' ? 'Local' : 'Visitante')}
-                            url={resolveParticipantAvatar(player)}
-                            size="sm"
+                            name={playerA?.name || 'Local'}
+                            url={resolveParticipantAvatar(playerA)}
+                            size="md"
                           />
                           <span
-                            className="mt-2 max-w-full truncate text-xs font-extrabold text-slate-900 uppercase dark:text-white classic:text-[#1E4638]"
-                            title={player?.name}
+                            className="mt-2 max-w-[180px] truncate text-sm font-black text-slate-900 uppercase sm:text-base dark:text-white classic:text-[#1E4638]"
+                            title={playerA?.name}
                           >
-                            {player?.name || (side === 'a' ? 'Local' : 'Visitante')}
+                            {playerA?.name || 'Local'}
                           </span>
-
-                          <motion.span
-                            key={`${side}-${score}`}
-                            initial={{ scale: 1.2 }}
-                            animate={{ scale: 1 }}
-                            transition={{ duration: 0.16 }}
-                            className="my-2 font-mono text-4xl font-black text-slate-900 tabular-nums dark:text-[#CCFF00] classic:text-[#1E4638]"
-                          >
-                            {score}
-                          </motion.span>
-
-                          <div className="flex w-full items-center gap-2">
-                            <motion.button
-                              type="button"
-                              whileTap={{ scale: 0.92 }}
-                              disabled={score <= 0}
-                              onClick={() => handleLiveScoreDelta(side, -1)}
-                              className="flex min-h-[44px] flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
-                              aria-label={`Restar 1 a ${player?.name}`}
-                            >
-                              <Minus className="h-4 w-4" />
-                            </motion.button>
-                            <motion.button
-                              type="button"
-                              whileTap={{ scale: 0.92 }}
-                              onClick={() => handleLiveScoreDelta(side, 1)}
-                              className="flex min-h-[44px] flex-[1.6] items-center justify-center gap-1 rounded-xl bg-emerald-600 text-sm font-black text-white shadow-sm hover:bg-emerald-700 dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8]"
-                              aria-label={`Sumar 1 a ${player?.name}`}
-                            >
-                              <Plus className="h-4 w-4 stroke-[2.6]" />
-                              <span>1</span>
-                            </motion.button>
-                          </div>
                         </div>
-                      ))}
+
+                        <motion.span
+                          key={`a-${parsedA ?? 0}`}
+                          initial={{ scale: 1.22 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.16 }}
+                          className="my-2 font-mono text-6xl font-black text-slate-900 tabular-nums sm:text-7xl max-lg:landscape:my-1 max-lg:landscape:text-5xl dark:text-[#CCFF00] classic:text-[#1E4638]"
+                        >
+                          {parsedA ?? 0}
+                        </motion.span>
+
+                        <div className="flex w-full items-center gap-2">
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
+                            disabled={(parsedA ?? 0) <= 0}
+                            onClick={() => handleLiveScoreDelta('a', -1)}
+                            className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                            aria-label={`Restar 1 a ${playerA?.name}`}
+                          >
+                            <Minus className="h-5 w-5" />
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => handleLiveScoreDelta('a', 1)}
+                            className="flex min-h-[48px] flex-[1.8] items-center justify-center gap-1 rounded-xl bg-emerald-600 text-base font-black text-white shadow-md hover:bg-emerald-700 dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8]"
+                            aria-label={`Sumar 1 a ${playerA?.name}`}
+                          >
+                            <Plus className="h-5 w-5 stroke-[2.8]" />
+                            <span>1</span>
+                          </motion.button>
+                        </div>
+                      </div>
+
+                      {/* Tarjeta Jugador B (Derecha en horizontal / PC) */}
+                      <div className="flex flex-col items-center justify-between rounded-2xl border border-slate-200/90 bg-slate-50/85 p-4 lg:order-3 lg:col-span-4 max-lg:landscape:order-3 max-lg:landscape:col-span-4 max-lg:landscape:p-3 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
+                        <div className="flex flex-col items-center">
+                          <Avatar
+                            name={playerB?.name || 'Visitante'}
+                            url={resolveParticipantAvatar(playerB)}
+                            size="md"
+                          />
+                          <span
+                            className="mt-2 max-w-[180px] truncate text-sm font-black text-slate-900 uppercase sm:text-base dark:text-white classic:text-[#1E4638]"
+                            title={playerB?.name}
+                          >
+                            {playerB?.name || 'Visitante'}
+                          </span>
+                        </div>
+
+                        <motion.span
+                          key={`b-${parsedB ?? 0}`}
+                          initial={{ scale: 1.22 }}
+                          animate={{ scale: 1 }}
+                          transition={{ duration: 0.16 }}
+                          className="my-2 font-mono text-6xl font-black text-slate-900 tabular-nums sm:text-7xl max-lg:landscape:my-1 max-lg:landscape:text-5xl dark:text-[#CCFF00] classic:text-[#1E4638]"
+                        >
+                          {parsedB ?? 0}
+                        </motion.span>
+
+                        <div className="flex w-full items-center gap-2">
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
+                            disabled={(parsedB ?? 0) <= 0}
+                            onClick={() => handleLiveScoreDelta('b', -1)}
+                            className="flex min-h-[48px] flex-1 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 disabled:opacity-40 dark:border-white/10 dark:bg-white/5 dark:text-slate-200"
+                            aria-label={`Restar 1 a ${playerB?.name}`}
+                          >
+                            <Minus className="h-5 w-5" />
+                          </motion.button>
+                          <motion.button
+                            type="button"
+                            whileTap={{ scale: 0.92 }}
+                            onClick={() => handleLiveScoreDelta('b', 1)}
+                            className="flex min-h-[48px] flex-[1.8] items-center justify-center gap-1 rounded-xl bg-emerald-600 text-base font-black text-white shadow-md hover:bg-emerald-700 dark:bg-[#CCFF00] dark:text-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8]"
+                            aria-label={`Sumar 1 a ${playerB?.name}`}
+                          >
+                            <Plus className="h-5 w-5 stroke-[2.8]" />
+                            <span>1</span>
+                          </motion.button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* Timeline de anotaciones en vivo */}
                     {liveEvents.length > 0 && (
                       <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-2.5 dark:border-white/[0.06] dark:bg-white/[0.03]">
-                        <p className="mb-1.5 flex items-center gap-1 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase dark:text-slate-400">
-                          <Clock className="h-3 w-3" />
-                          <span>Registro en vivo</span>
-                        </p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {liveEvents.slice(0, 8).map((ev) => (
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 pr-1 text-[10px] font-extrabold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+                            <Clock className="h-3 w-3" />
+                            <span>Goles/Puntos:</span>
+                          </span>
+                          {liveEvents.slice(0, 10).map((ev) => (
                             <span
                               key={ev.id}
                               className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:border-white/10 dark:bg-[#141923] dark:text-slate-200"
@@ -1082,7 +1232,7 @@ export default function MatchResultModal({
                     animate={{ opacity: 1, height: 'auto', y: 0 }}
                     exit={{ opacity: 0, height: 0, y: -6 }}
                     transition={{ duration: 0.2, ease: 'easeOut' }}
-                    className="overflow-hidden"
+                    className="mx-auto w-full max-w-lg overflow-hidden"
                   >
                     <div className="rounded-2xl border border-amber-300/80 bg-amber-50/90 p-3.5 dark:border-amber-500/35 dark:bg-amber-500/12">
                       <p className="mb-2.5 text-xs font-bold text-amber-900 dark:text-amber-200">
@@ -1134,13 +1284,13 @@ export default function MatchResultModal({
             </form>
 
             {/* Footer fijo siempre accesible */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-t border-slate-200/80 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:py-4 dark:border-white/[0.08] dark:bg-[#141923] classic:border-t-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2.5 border-t border-slate-200/80 bg-white px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 dark:border-white/[0.08] dark:bg-[#141923] classic:border-t-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
               {match.status === 'completed' && (
                 <button
                   type="button"
                   disabled={saving}
                   onClick={handleResetMatch}
-                  className="inline-flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700 transition active:bg-rose-100 hover:bg-rose-100 disabled:opacity-50 sm:w-auto dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
+                  className="inline-flex min-h-[40px] w-full items-center justify-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-bold text-rose-700 transition active:bg-rose-100 hover:bg-rose-100 disabled:opacity-50 sm:w-auto dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-200 dark:hover:bg-rose-500/25"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
                   <span>Resetear a pendiente</span>
@@ -1151,8 +1301,8 @@ export default function MatchResultModal({
                 <button
                   type="button"
                   disabled={saving}
-                  onClick={onClose}
-                  className="min-h-[44px] flex-1 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 sm:flex-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
+                  onClick={handleSafeClose}
+                  className="min-h-[42px] flex-1 rounded-xl border border-slate-200/90 bg-white px-4 py-2 text-xs font-bold text-slate-700 transition hover:bg-slate-50 disabled:opacity-50 sm:flex-none dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10"
                 >
                   Cancelar
                 </button>
@@ -1160,7 +1310,7 @@ export default function MatchResultModal({
                   type="submit"
                   form="match-result-form"
                   disabled={saving}
-                  className="inline-flex min-h-[44px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-md transition active:scale-[0.98] hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 sm:flex-none dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#1E4638]"
+                  className="inline-flex min-h-[42px] flex-1 items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-5 py-2 text-xs font-extrabold tracking-wider text-white uppercase shadow-md transition active:scale-[0.98] hover:from-emerald-500 hover:to-teal-500 disabled:opacity-60 sm:flex-none dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#1E4638]"
                 >
                   {saving && <Loader2 className="h-4 w-4 animate-spin" />}
                   <span>Guardar</span>

@@ -149,6 +149,15 @@ export default function Dashboard({
     return <User className="h-3 w-3" />;
   }
 
+  // Grilla dinámica según la cantidad de torneos (1 ocupa todo, 2 divide en 2, 3+ en 3)
+  const count = memberships.length;
+  const gridColsClass =
+    count === 1
+      ? 'grid-cols-1'
+      : count === 2
+      ? 'grid-cols-1 md:grid-cols-2'
+      : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       {/* Header atlético */}
@@ -295,7 +304,7 @@ export default function Dashboard({
           </motion.button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className={`grid gap-4 ${gridColsClass}`}>
           {memberships.map((membership, idx) => {
             const { tournament, role } = membership;
             const formatMeta = getFormatMeta(tournament.format);
@@ -308,6 +317,9 @@ export default function Dashboard({
             const participantCount =
               tournament.tournament_participants?.[0]?.count ?? 0;
 
+            const isSingle = count === 1;
+            const isDouble = count === 2;
+
             return (
               <motion.button
                 key={tournament.id}
@@ -318,7 +330,13 @@ export default function Dashboard({
                 whileHover={{ y: -3 }}
                 whileTap={{ scale: 0.985 }}
                 onClick={() => onSelectTournament(tournament.id)}
-                className={`glass-card group relative flex min-h-[44px] flex-col justify-between overflow-hidden rounded-2xl p-5 text-left transition hover:shadow-xl dark:hover:border-white/20 ${sportTheme.accentBorder}`}
+                className={`glass-card group relative flex flex-col justify-between overflow-hidden rounded-2xl text-left transition hover:shadow-xl dark:hover:border-white/20 ${
+                  isSingle
+                    ? 'min-h-[220px] p-6 sm:p-8'
+                    : isDouble
+                    ? 'min-h-[195px] p-6'
+                    : 'min-h-[175px] p-5'
+                } ${sportTheme.accentBorder}`}
               >
                 {/* Ribbon superior temático */}
                 <div
@@ -328,7 +346,9 @@ export default function Dashboard({
                 {/* Watermark del deporte estilo póster */}
                 <span
                   aria-hidden="true"
-                  className="pointer-events-none absolute -right-2 bottom-10 text-7xl opacity-[0.07] transition-transform duration-300 select-none group-hover:scale-110 group-hover:-rotate-6 dark:opacity-[0.06] classic:opacity-[0.12]"
+                  className={`pointer-events-none absolute -right-2 bottom-10 opacity-[0.08] transition-transform duration-300 select-none group-hover:scale-110 group-hover:-rotate-6 dark:opacity-[0.07] classic:opacity-[0.14] ${
+                    isSingle ? 'text-8xl sm:text-9xl' : 'text-7xl'
+                  }`}
                 >
                   {sportTheme.emoji}
                 </span>
@@ -358,17 +378,31 @@ export default function Dashboard({
                     </div>
                   </div>
 
-                  {/* Título protagonista con identidad */}
+                  {/* Título adaptable según el tamaño de tarjeta */}
                   <div className="mb-3">
-                    <h3 className="line-clamp-2 text-xl leading-[1.12] font-black tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-700 sm:text-[22px] dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#1E4638] classic:group-hover:text-[#D46F4D]">
+                    <h3
+                      className={`line-clamp-2 leading-[1.1] font-black tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#1E4638] classic:group-hover:text-[#D46F4D] ${
+                        isSingle
+                          ? 'text-2xl sm:text-3xl'
+                          : isDouble
+                          ? 'text-xl sm:text-2xl'
+                          : 'text-xl sm:text-[22px]'
+                      }`}
+                    >
                       {tournament.name}
                     </h3>
-                    <div className="mt-2 h-1 w-10 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 group-hover:w-16 dark:bg-[#CCFF00] dark:bg-none dark:shadow-[0_0_12px_rgba(204,255,0,0.6)] classic:bg-[#D46F4D] classic:bg-none" />
+                    <div
+                      className={`mt-2.5 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 dark:bg-[#CCFF00] dark:bg-none dark:shadow-[0_0_12px_rgba(204,255,0,0.6)] classic:bg-[#D46F4D] classic:bg-none ${
+                        isSingle
+                          ? 'w-14 group-hover:w-24'
+                          : 'w-10 group-hover:w-16'
+                      }`}
+                    />
                   </div>
 
                   {configItems.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1.5">
-                      {configItems.slice(0, 2).map((item, cIdx) => (
+                      {configItems.slice(0, isSingle ? 4 : 2).map((item, cIdx) => (
                         <span
                           key={cIdx}
                           className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/[0.06] dark:text-slate-300 classic:border classic:border-[#1E4638]/20 classic:bg-[#EFE2CC] classic:text-[#1E4638]"
@@ -380,7 +414,7 @@ export default function Dashboard({
                   )}
                 </div>
 
-                <div className="relative z-10 mt-5 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400 classic:border-[#1E4638]/15 classic:text-[#4C6B5E]">
+                <div className="relative z-10 mt-6 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400 classic:border-[#1E4638]/15 classic:text-[#4C6B5E]">
                   <div className="flex items-center gap-3 tabular-nums">
                     <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-slate-700 dark:text-slate-200 classic:text-[#1E4638]">
                       <Users className="h-3.5 w-3.5 text-slate-400 classic:text-[#D46F4D]" />
@@ -394,9 +428,9 @@ export default function Dashboard({
                     </span>
                   </div>
 
-                  <span className="inline-flex items-center gap-0.5 text-[11px] font-extrabold tracking-wider text-emerald-600 uppercase dark:text-[#CCFF00] classic:text-[#D46F4D]">
-                    <span>Entrar</span>
-                    <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                  <span className="inline-flex items-center gap-1 text-xs font-extrabold tracking-wider text-emerald-600 uppercase dark:text-[#CCFF00] classic:text-[#D46F4D]">
+                    <span>Entrar al torneo</span>
+                    <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                   </span>
                 </div>
 
