@@ -51,10 +51,9 @@ export default function BrandLogo({
   const isLoop = mode === 'auth-loop';
   const isSuccess = mode === 'auth-success';
 
-  // En modo loop el logo NUNCA se desmonta ni cambia su opacidad: solo respira suavemente en ida y vuelta
   const containerAnimate = isSuccess
     ? {
-        scale: [1, 1.3, 0.95, 1.08, 1],
+        scale: [1, 1.32, 0.95, 1.08, 1],
         rotate: [0, -14, 360],
         y: [0, -10, 2, 0],
       }
@@ -74,7 +73,7 @@ export default function BrandLogo({
     ? { duration: 0.66, ease: [0.22, 1, 0.36, 1] }
     : isLoop
     ? {
-        duration: isLoading ? 0.85 : 2.8,
+        duration: isLoading ? 0.85 : 2.6,
         repeat: Infinity,
         ease: 'easeInOut',
       }
@@ -82,7 +81,11 @@ export default function BrandLogo({
 
   return (
     <motion.div
-      key={isLoop || isSuccess ? 'brand-logo-persistent-auth' : `brand-logo-burst-${activeTheme}-${animateKey}`}
+      key={
+        isLoop || isSuccess
+          ? 'brand-logo-persistent-auth'
+          : `brand-logo-burst-${activeTheme}-${animateKey}`
+      }
       initial={false}
       animate={containerAnimate}
       transition={containerTransition}
@@ -98,7 +101,7 @@ export default function BrandLogo({
             opacity: isLoading ? [0.35, 0.75, 0.35] : [0.25, 0.55, 0.25],
           }}
           transition={{
-            duration: isLoading ? 0.85 : 2.8,
+            duration: isLoading ? 0.85 : 2.6,
             repeat: Infinity,
             ease: 'easeInOut',
           }}
@@ -106,7 +109,7 @@ export default function BrandLogo({
         />
       )}
 
-      {/* Onda expansiva única solo para momentos puntuales (éxito o cambio de pantalla en Navbar) */}
+      {/* Onda expansiva única solo al concretar éxito o cambiar de vista en Navbar */}
       {!isLoop && (
         <motion.span
           key={`burst-ring-${mode}-${activeTheme}-${animateKey}`}
@@ -134,15 +137,15 @@ export default function BrandLogo({
           />
         ))}
 
-      {/* Emblema SVG 100% sólido siempre */}
+      {/* Emblema SVG Escudo + Llaves + Copa + Estrella */}
       <svg
         viewBox="0 0 40 40"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         className={`relative z-10 ${dim.svg}`}
       >
-        {/* Escudo exterior */}
-        <path
+        {/* Escudo exterior con la animación de trazo (pathLength) que rodea la copa */}
+        <motion.path
           d="M20 3.5L33.5 8.5V19.5C33.5 27.8 27.7 34.4 20 36.8C12.3 34.4 6.5 27.8 6.5 19.5V8.5L20 3.5Z"
           stroke="currentColor"
           strokeWidth="2.4"
@@ -150,38 +153,67 @@ export default function BrandLogo({
           strokeLinejoin="round"
           fill="currentColor"
           fillOpacity="0.14"
+          initial={isLoop ? { pathLength: 0.62 } : { pathLength: 0.25 }}
+          animate={
+            isLoop
+              ? {
+                  pathLength: isLoading ? [0.45, 1, 0.45] : [0.62, 1, 0.62],
+                }
+              : { pathLength: 1 }
+          }
+          transition={
+            isLoop
+              ? {
+                  duration: isLoading ? 0.85 : 2.6,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }
+              : { duration: 0.55, ease: 'easeOut' }
+          }
         />
 
-        {/* Llaves laterales (Brackets) */}
-        <path
+        {/* Líneas laterales tipo llaves de torneo (Brackets) */}
+        <motion.path
           d="M10.5 14H13.5V21H10.5M29.5 14H26.5V21H29.5"
           stroke="currentColor"
           strokeWidth="1.9"
           strokeLinecap="round"
           strokeLinejoin="round"
-          opacity="0.85"
+          initial={false}
+          animate={
+            isLoop ? { opacity: [0.55, 0.95, 0.55] } : { opacity: 0.82 }
+          }
+          transition={
+            isLoop
+              ? {
+                  duration: isLoading ? 0.85 : 2.6,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }
+              : { duration: 0.4 }
+          }
         />
 
-        {/* Copa central con respiración suave */}
+        {/* Copa central */}
         <motion.path
           d="M14.5 11.5H25.5V16.8C25.5 19.8 23.1 22.2 20 22.2C16.9 22.2 14.5 19.8 14.5 16.8V11.5Z"
           fill="currentColor"
           initial={false}
           animate={
             isLoop
-              ? { y: [0, -1.2, 0], scale: [1, 1.04, 1] }
+              ? { y: [0, -1.5, 0], scale: [1, 1.05, 1] }
               : isSuccess
-              ? { scale: [1, 1.22, 1], y: [0, -2, 0] }
+              ? { scale: [1, 1.24, 1], y: [0, -2.5, 0] }
               : { y: 0, scale: 1 }
           }
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.8,
+                  duration: isLoading ? 0.85 : 2.6,
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }
-              : { duration: 0.45 }
+              : { type: 'spring', stiffness: 420, damping: 18 }
           }
         />
 
@@ -202,21 +234,23 @@ export default function BrandLogo({
           animate={
             isLoop
               ? {
-                  scale: isLoading ? [1, 1.28, 1] : [1, 1.18, 1],
-                  rotate: isLoading ? [0, 180, 360] : [0, 12, -12, 0],
+                  scale: isLoading ? [0.95, 1.32, 0.95] : [1, 1.22, 1],
+                  rotate: isLoading ? [0, 180, 360] : [0, 14, -14, 0],
                 }
               : isSuccess
-              ? { scale: [1, 1.45, 1], rotate: [0, 360] }
-              : { scale: [0.85, 1.2, 1], rotate: 0 }
+              ? { scale: [0.8, 1.5, 1], rotate: [0, 360] }
+              : activeTheme === 'dark'
+              ? { scale: [0.4, 1.35, 1], rotate: [-180, 15, 0] }
+              : { scale: [0.5, 1.25, 1], rotate: 0 }
           }
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.8,
+                  duration: isLoading ? 0.85 : 2.6,
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }
-              : { duration: 0.5, ease: 'backOut' }
+              : { duration: 0.55, ease: 'backOut' }
           }
         />
       </svg>

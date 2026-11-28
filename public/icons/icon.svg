@@ -1,17 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
   <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#10b981" />
-      <stop offset="100%" stop-color="#047857" />
+    <linearGradient id="bgOrange" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D46F4D" />
+      <stop offset="55%" stop-color="#C8603E" />
+      <stop offset="100%" stop-color="#A94B2D" />
+    </linearGradient>
+    <linearGradient id="shieldFill" x1="120" y1="60" x2="392" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FBF5E8" stop-opacity="0.22" />
+      <stop offset="100%" stop-color="#FBF5E8" stop-opacity="0.08" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="url(#bg)" />
-  <g fill="none" stroke="#ffffff" stroke-width="28" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M166 132h180v64c0 54-40 98-90 98s-90-44-90-98v-64z" fill="#ffffff" stroke="none" />
-    <path d="M166 156h-32c-20 0-34 16-34 36 0 28 22 48 54 48h16" />
-    <path d="M346 156h32c20 0 34 16 34 36 0 28-22 48-54 48h-16" />
-    <path d="M256 292v64" />
-    <path d="M196 356h120" />
-    <path d="M168 392h176" />
-  </g>
+
+  <!-- Fondo Naranja Terracota con borde Crema y filete Ocre -->
+  <rect width="512" height="512" rx="116" fill="url(#bgOrange)" />
+  <rect x="14" y="14" width="484" height="484" rx="102" stroke="#FBF5E8" stroke-width="14" />
+
+  <!-- Escudo exterior de campeonato -->
+  <path
+    d="M256 56L418 118V250C418 352 348 430 256 460C164 430 94 352 94 250V118L256 56Z"
+    fill="url(#shieldFill)"
+    stroke="#FBF5E8"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Llaves laterales de torneo (Brackets) -->
+  <path
+    d="M140 184H176V270H140M372 184H336V270H372"
+    stroke="#FBF5E8"
+    stroke-opacity="0.82"
+    stroke-width="22"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+
+  <!-- Copa central -->
+  <path
+    d="M188 152H324V218C324 256 294 286 256 286C218 286 188 256 188 218V152Z"
+    fill="#FBF5E8"
+  />
+
+  <!-- Pedestal y base de la copa -->
+  <path
+    d="M256 286V344M204 346H308"
+    stroke="#FBF5E8"
+    stroke-width="30"
+    stroke-linecap="round"
+  />
+
+  <!-- Estrella superior de campeón Ocre Dorado -->
+  <path
+    d="M256 90L270 119L302 123L278 144L284 175L256 159L228 175L234 144L210 123L242 119L256 90Z"
+    fill="#D9A441"
+  />
 </svg>
