@@ -3,7 +3,6 @@ import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Download,
-  LogOut,
   Moon,
   Palette,
   Share,
@@ -28,8 +27,6 @@ export default function Navbar({
   user,
   profile,
   onOpenProfile,
-  onSignOut,
-  signingOut,
   onGoHome,
   theme = 'light',
   onToggleTheme,
@@ -331,7 +328,7 @@ export default function Navbar({
                 type="button"
                 whileTap={{ scale: 0.97 }}
                 onClick={onOpenProfile}
-                aria-label="Editar mi perfil y avatar"
+                aria-label="Abrir mi perfil"
                 className="inline-flex min-h-[40px] items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50/90 px-2.5 py-1.5 text-xs font-bold text-slate-800 transition hover:border-emerald-400/60 hover:bg-white dark:border-white/[0.08] dark:bg-white/5 dark:text-white dark:hover:border-[#CCFF00]/40 dark:hover:bg-white/10 classic:border-2 classic:border-[#FBF5E8]/35 classic:bg-[#285947] classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#143026] classic:hover:border-[#D9A441]"
               >
                 <Avatar
@@ -344,20 +341,6 @@ export default function Navbar({
                 </span>
               </motion.button>
             )}
-
-            <motion.button
-              type="button"
-              whileTap={{ scale: 0.96 }}
-              onClick={onSignOut}
-              disabled={signingOut}
-              className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-bold text-slate-700 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/[0.08] dark:bg-white/5 dark:text-slate-300 dark:hover:border-rose-500/30 dark:hover:bg-rose-500/15 dark:hover:text-rose-300 classic:border-2 classic:border-[#FBF5E8]/30 classic:bg-[#285947] classic:text-[#FBF5E8] classic:hover:border-[#D46F4D] classic:hover:bg-[#D46F4D] classic:hover:text-[#FBF5E8]"
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">
-                {signingOut ? 'Saliendo...' : 'Cerrar sesión'}
-              </span>
-              <span className="sm:hidden">Salir</span>
-            </motion.button>
           </div>
         </div>
       </header>

@@ -1640,6 +1640,38 @@ export default function TournamentView({
       setConfirmDeleteTournament(false);
     }
   }
+  const [confirmLeaveTournament, setConfirmLeaveTournament] = useState(false);
+  const [leavingTournament, setLeavingTournament] = useState(false);
+
+  async function handleLeaveTournament() {
+    if (isOwner || !tournament) return;
+    setLeavingTournament(true);
+    setError('');
+
+    try {
+      // Si tenía un jugador vinculado, lo desvinculamos para no borrar sus partidos
+      await supabase
+        .from('tournament_participants')
+        .update({ user_id: null })
+        .eq('tournament_id', tournament.id)
+        .eq('user_id', user.id);
+
+      const { error: leaveErr } = await supabase
+        .from('tournament_members')
+        .delete()
+        .eq('tournament_id', tournament.id)
+        .eq('user_id', user.id);
+
+      if (leaveErr) throw leaveErr;
+
+      toast.info('Abandonaste el torneo');
+      onBack();
+    } catch (err) {
+      setError(err?.message || 'No se pudo abandonar el torneo.');
+      setLeavingTournament(false);
+      setConfirmLeaveTournament(false);
+    }
+  }
 
   const mainTabs = useMemo(() => {
     const list = [
@@ -2116,6 +2148,44 @@ export default function TournamentView({
                             ))}
                         </div>
                       )}
+                      {!isOwner &&
+                        (!confirmLeaveTournament ? (
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            type="button"
+                            onClick={() => setConfirmLeaveTournament(true)}
+                            className="inline-flex min-h-[38px] items-center gap-1.5 rounded-xl border border-slate-200 bg-white/80 px-3 py-1.5 text-xs font-bold text-rose-600 transition hover:border-rose-200 hover:bg-rose-50 dark:border-white/[0.08] dark:bg-white/5 dark:text-rose-400 dark:hover:bg-rose-500/15"
+                          >
+                            <Unlink className="h-3.5 w-3.5" />
+                            <span>Abandonar torneo</span>
+                          </motion.button>
+                        ) : (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 p-1.5 dark:border-rose-500/35 dark:bg-rose-500/15"
+                          >
+                            <span className="px-1.5 text-xs font-bold text-rose-700 dark:text-rose-200">
+                              ¿Salir del torneo?
+                            </span>
+                            <button
+                              type="button"
+                              onClick={handleLeaveTournament}
+                              disabled={leavingTournament}
+                              className="min-h-[36px] rounded-lg bg-rose-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-rose-700 disabled:opacity-60"
+                            >
+                              {leavingTournament ? 'Saliendo...' : 'Sí, salir'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setConfirmLeaveTournament(false)}
+                              disabled={leavingTournament}
+                              className="min-h-[36px] rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-100 dark:bg-white/10 dark:text-slate-200"
+                            >
+                              No
+                            </button>
+                          </motion.div>
+                        ))}
                     </div>
 
                     {configItems.length > 0 && (

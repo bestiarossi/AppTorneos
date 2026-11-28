@@ -149,7 +149,6 @@ export default function Dashboard({
     return <User className="h-3 w-3" />;
   }
 
-  // Grilla dinámica según la cantidad de torneos (1 ocupa todo, 2 divide en 2, 3+ en 3)
   const count = memberships.length;
   const gridColsClass =
     count === 1
@@ -185,8 +184,188 @@ export default function Dashboard({
         </motion.button>
       </div>
 
-      {/* Tarjeta de unión por código */}
-      <section className="glass-card mb-8 rounded-2xl p-5">
+      {fetchError && (
+        <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
+          <div className="flex items-center gap-2.5">
+            <AlertCircle className="h-5 w-5 shrink-0" />
+            <span>{fetchError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchTournaments}
+            className="min-h-[40px] rounded-xl bg-white px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-rose-700 uppercase shadow-xs hover:bg-rose-100 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
+      {/* Lista de Torneos primero */}
+      {loading ? (
+        <DashboardSkeleton />
+      ) : memberships.length === 0 ? (
+        <div className="glass-card rounded-2xl border-dashed px-6 py-14 text-center">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC] classic:text-[#1E4638]">
+            <Trophy className="h-7 w-7" />
+          </div>
+          <h3 className="text-base font-extrabold tracking-tight text-slate-900 uppercase dark:text-white classic:text-[#1E4638]">
+            Todavía no participas en ningún torneo
+          </h3>
+          <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400 classic:text-[#4C6B5E]">
+            Crea un nuevo torneo para invitar a tus amigos o ingresa abajo un código de
+            invitación si ya armaron uno.
+          </p>
+          <motion.button
+            whileTap={{ scale: 0.97 }}
+            type="button"
+            onClick={() => setIsCreateModalOpen(true)}
+            className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold tracking-wider text-white uppercase shadow-sm transition hover:bg-emerald-700 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#1E4638]"
+          >
+            <Plus className="h-4 w-4 stroke-[2.5]" />
+            <span>Crear mi primer torneo</span>
+          </motion.button>
+        </div>
+      ) : (
+        <div className={`grid gap-4 ${gridColsClass}`}>
+          {memberships.map((membership, idx) => {
+            const { tournament, role } = membership;
+            const formatMeta = getFormatMeta(tournament.format);
+            const roleMeta = getRoleMeta(role);
+            const sportTheme = getTournamentTheme(tournament.config);
+            const configItems = getConfigSummaryItems(
+              tournament.format,
+              tournament.config
+            );
+            const participantCount =
+              tournament.tournament_participants?.[0]?.count ?? 0;
+
+            const isSingle = count === 1;
+            const isDouble = count === 2;
+
+            return (
+              <motion.button
+                key={tournament.id}
+                type="button"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, delay: Math.min(idx * 0.04, 0.28) }}
+                whileHover={{ y: -3 }}
+                whileTap={{ scale: 0.985 }}
+                onClick={() => onSelectTournament(tournament.id)}
+                className={`glass-card group relative flex flex-col justify-between overflow-hidden rounded-2xl text-left transition hover:shadow-xl dark:hover:border-white/20 ${
+                  isSingle
+                    ? 'min-h-[220px] p-6 sm:p-8'
+                    : isDouble
+                    ? 'min-h-[195px] p-6'
+                    : 'min-h-[175px] p-5'
+                } ${sportTheme.accentBorder}`}
+              >
+                <div
+                  className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${sportTheme.cardRibbon}`}
+                />
+
+                <span
+                  aria-hidden="true"
+                  className={`pointer-events-none absolute -right-2 bottom-10 opacity-[0.08] transition-transform duration-300 select-none group-hover:scale-110 group-hover:-rotate-6 dark:opacity-[0.07] classic:opacity-[0.14] ${
+                    isSingle ? 'text-8xl sm:text-9xl' : 'text-7xl'
+                  }`}
+                >
+                  {sportTheme.emoji}
+                </span>
+
+                <div className="relative z-10">
+                  <div className="mb-4 flex flex-wrap items-center justify-between gap-1.5">
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase ${roleMeta.badgeClass}`}
+                    >
+                      {renderRoleIcon(role)}
+                      <span>{roleMeta.label}</span>
+                    </span>
+
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${sportTheme.badgeClass}`}
+                      >
+                        <span>{sportTheme.emoji}</span>
+                        <span className="hidden sm:inline">{sportTheme.label}</span>
+                      </span>
+
+                      <span
+                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${formatMeta.badgeClass}`}
+                      >
+                        {formatMeta.label}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="mb-3">
+                    <h3
+                      className={`line-clamp-2 leading-[1.1] font-black tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#1E4638] classic:group-hover:text-[#D46F4D] ${
+                        isSingle
+                          ? 'text-2xl sm:text-3xl'
+                          : isDouble
+                          ? 'text-xl sm:text-2xl'
+                          : 'text-xl sm:text-[22px]'
+                      }`}
+                    >
+                      {tournament.name}
+                    </h3>
+                    <div
+                      className={`mt-2.5 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 dark:bg-[#CCFF00] dark:bg-none dark:shadow-[0_0_12px_rgba(204,255,0,0.6)] classic:bg-[#D46F4D] classic:bg-none ${
+                        isSingle
+                          ? 'w-14 group-hover:w-24'
+                          : 'w-10 group-hover:w-16'
+                      }`}
+                    />
+                  </div>
+
+                  {configItems.length > 0 && (
+                    <div className="mt-3 flex flex-wrap gap-1.5">
+                      {configItems.slice(0, isSingle ? 4 : 2).map((item, cIdx) => (
+                        <span
+                          key={cIdx}
+                          className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/[0.06] dark:text-slate-300 classic:border classic:border-[#1E4638]/20 classic:bg-[#EFE2CC] classic:text-[#1E4638]"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="relative z-10 mt-6 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400 classic:border-[#1E4638]/15 classic:text-[#4C6B5E]">
+                  <div className="flex items-center gap-3 tabular-nums">
+                    <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-slate-700 dark:text-slate-200 classic:text-[#1E4638]">
+                      <Users className="h-3.5 w-3.5 text-slate-400 classic:text-[#D46F4D]" />
+                      {participantCount}{' '}
+                      <span className="font-sans font-semibold text-slate-500 dark:text-slate-400">
+                        {participantCount === 1 ? 'jugador' : 'jugadores'}
+                      </span>
+                    </span>
+                    <span className="hidden rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-500 sm:inline dark:bg-white/[0.05] dark:text-slate-400 classic:bg-[#EFE2CC] classic:text-[#1E4638]">
+                      #{tournament.invite_code}
+                    </span>
+                  </div>
+
+                  <span className="inline-flex items-center gap-1 text-xs font-extrabold tracking-wider text-emerald-600 uppercase dark:text-[#CCFF00] classic:text-[#D46F4D]">
+                    <span>Entrar al torneo</span>
+                    <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                  </span>
+                </div>
+
+                {tournament.created_at && (
+                  <p className="relative z-10 mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500 classic:text-[#607D71]">
+                    Creado el {formatShortDate(tournament.created_at)}
+                  </p>
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Tarjeta de unión por código debajo de los torneos */}
+      <section className="glass-card mt-8 rounded-2xl p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/12 text-emerald-600 dark:bg-[#CCFF00]/12 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#D9A441]/30 classic:text-[#1E4638]">
@@ -262,188 +441,6 @@ export default function Dashboard({
           </div>
         )}
       </section>
-
-      {fetchError && (
-        <div className="mb-6 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
-          <div className="flex items-center gap-2.5">
-            <AlertCircle className="h-5 w-5 shrink-0" />
-            <span>{fetchError}</span>
-          </div>
-          <button
-            type="button"
-            onClick={fetchTournaments}
-            className="min-h-[40px] rounded-xl bg-white px-3.5 py-1.5 text-xs font-extrabold tracking-wider text-rose-700 uppercase shadow-xs hover:bg-rose-100 dark:bg-white/10 dark:text-white dark:hover:bg-white/15"
-          >
-            Reintentar
-          </button>
-        </div>
-      )}
-
-      {loading ? (
-        <DashboardSkeleton />
-      ) : memberships.length === 0 ? (
-        <div className="glass-card rounded-2xl border-dashed px-6 py-14 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400 dark:bg-white/5 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC] classic:text-[#1E4638]">
-            <Trophy className="h-7 w-7" />
-          </div>
-          <h3 className="text-base font-extrabold tracking-tight text-slate-900 uppercase dark:text-white classic:text-[#1E4638]">
-            Todavía no participas en ningún torneo
-          </h3>
-          <p className="mx-auto mt-1.5 max-w-md text-sm text-slate-500 dark:text-slate-400 classic:text-[#4C6B5E]">
-            Crea un nuevo torneo para invitar a tus amigos o ingresa arriba un código de
-            invitación si ya armaron uno.
-          </p>
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            type="button"
-            onClick={() => setIsCreateModalOpen(true)}
-            className="mt-6 inline-flex min-h-[44px] items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-extrabold tracking-wider text-white uppercase shadow-sm transition hover:bg-emerald-700 dark:bg-[#CCFF00] dark:text-[#0B0E14] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#1E4638]"
-          >
-            <Plus className="h-4 w-4 stroke-[2.5]" />
-            <span>Crear mi primer torneo</span>
-          </motion.button>
-        </div>
-      ) : (
-        <div className={`grid gap-4 ${gridColsClass}`}>
-          {memberships.map((membership, idx) => {
-            const { tournament, role } = membership;
-            const formatMeta = getFormatMeta(tournament.format);
-            const roleMeta = getRoleMeta(role);
-            const sportTheme = getTournamentTheme(tournament.config);
-            const configItems = getConfigSummaryItems(
-              tournament.format,
-              tournament.config
-            );
-            const participantCount =
-              tournament.tournament_participants?.[0]?.count ?? 0;
-
-            const isSingle = count === 1;
-            const isDouble = count === 2;
-
-            return (
-              <motion.button
-                key={tournament.id}
-                type="button"
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.22, delay: Math.min(idx * 0.04, 0.28) }}
-                whileHover={{ y: -3 }}
-                whileTap={{ scale: 0.985 }}
-                onClick={() => onSelectTournament(tournament.id)}
-                className={`glass-card group relative flex flex-col justify-between overflow-hidden rounded-2xl text-left transition hover:shadow-xl dark:hover:border-white/20 ${
-                  isSingle
-                    ? 'min-h-[220px] p-6 sm:p-8'
-                    : isDouble
-                    ? 'min-h-[195px] p-6'
-                    : 'min-h-[175px] p-5'
-                } ${sportTheme.accentBorder}`}
-              >
-                {/* Ribbon superior temático */}
-                <div
-                  className={`pointer-events-none absolute inset-x-0 top-0 h-1.5 bg-gradient-to-r ${sportTheme.cardRibbon}`}
-                />
-
-                {/* Watermark del deporte estilo póster */}
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none absolute -right-2 bottom-10 opacity-[0.08] transition-transform duration-300 select-none group-hover:scale-110 group-hover:-rotate-6 dark:opacity-[0.07] classic:opacity-[0.14] ${
-                    isSingle ? 'text-8xl sm:text-9xl' : 'text-7xl'
-                  }`}
-                >
-                  {sportTheme.emoji}
-                </span>
-
-                <div className="relative z-10">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-1.5">
-                    <span
-                      className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-bold tracking-wide uppercase ${roleMeta.badgeClass}`}
-                    >
-                      {renderRoleIcon(role)}
-                      <span>{roleMeta.label}</span>
-                    </span>
-
-                    <div className="flex items-center gap-1.5">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-bold ${sportTheme.badgeClass}`}
-                      >
-                        <span>{sportTheme.emoji}</span>
-                        <span className="hidden sm:inline">{sportTheme.label}</span>
-                      </span>
-
-                      <span
-                        className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-bold ${formatMeta.badgeClass}`}
-                      >
-                        {formatMeta.label}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Título adaptable según el tamaño de tarjeta */}
-                  <div className="mb-3">
-                    <h3
-                      className={`line-clamp-2 leading-[1.1] font-black tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-700 dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#1E4638] classic:group-hover:text-[#D46F4D] ${
-                        isSingle
-                          ? 'text-2xl sm:text-3xl'
-                          : isDouble
-                          ? 'text-xl sm:text-2xl'
-                          : 'text-xl sm:text-[22px]'
-                      }`}
-                    >
-                      {tournament.name}
-                    </h3>
-                    <div
-                      className={`mt-2.5 h-1 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 transition-all duration-300 dark:bg-[#CCFF00] dark:bg-none dark:shadow-[0_0_12px_rgba(204,255,0,0.6)] classic:bg-[#D46F4D] classic:bg-none ${
-                        isSingle
-                          ? 'w-14 group-hover:w-24'
-                          : 'w-10 group-hover:w-16'
-                      }`}
-                    />
-                  </div>
-
-                  {configItems.length > 0 && (
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {configItems.slice(0, isSingle ? 4 : 2).map((item, cIdx) => (
-                        <span
-                          key={cIdx}
-                          className="rounded-lg bg-slate-100 px-2.5 py-1 text-[11px] font-bold text-slate-600 dark:bg-white/[0.06] dark:text-slate-300 classic:border classic:border-[#1E4638]/20 classic:bg-[#EFE2CC] classic:text-[#1E4638]"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className="relative z-10 mt-6 flex items-center justify-between border-t border-slate-100 pt-3.5 text-xs text-slate-500 dark:border-white/[0.06] dark:text-slate-400 classic:border-[#1E4638]/15 classic:text-[#4C6B5E]">
-                  <div className="flex items-center gap-3 tabular-nums">
-                    <span className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-slate-700 dark:text-slate-200 classic:text-[#1E4638]">
-                      <Users className="h-3.5 w-3.5 text-slate-400 classic:text-[#D46F4D]" />
-                      {participantCount}{' '}
-                      <span className="font-sans font-semibold text-slate-500 dark:text-slate-400">
-                        {participantCount === 1 ? 'jugador' : 'jugadores'}
-                      </span>
-                    </span>
-                    <span className="hidden rounded-md bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] font-bold text-slate-500 sm:inline dark:bg-white/[0.05] dark:text-slate-400 classic:bg-[#EFE2CC] classic:text-[#1E4638]">
-                      #{tournament.invite_code}
-                    </span>
-                  </div>
-
-                  <span className="inline-flex items-center gap-1 text-xs font-extrabold tracking-wider text-emerald-600 uppercase dark:text-[#CCFF00] classic:text-[#D46F4D]">
-                    <span>Entrar al torneo</span>
-                    <ChevronRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                  </span>
-                </div>
-
-                {tournament.created_at && (
-                  <p className="relative z-10 mt-2 text-[11px] font-medium text-slate-400 dark:text-slate-500 classic:text-[#607D71]">
-                    Creado el {formatShortDate(tournament.created_at)}
-                  </p>
-                )}
-              </motion.button>
-            );
-          })}
-        </div>
-      )}
 
       <CreateTournamentModal
         isOpen={isCreateModalOpen}
