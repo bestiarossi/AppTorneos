@@ -8,7 +8,6 @@ import {
   Share,
   Smartphone,
   Sun,
-  Trophy,
   Volume1,
   Volume2,
   VolumeX,
@@ -22,6 +21,7 @@ import {
   updateSoundSettings,
 } from '../utils/soundEffects';
 import Avatar from './Avatar';
+import BrandLogo from './BrandLogo';
 
 export default function Navbar({
   user,
@@ -30,6 +30,7 @@ export default function Navbar({
   onGoHome,
   theme = 'light',
   onToggleTheme,
+  logoTriggerKey = 'home',
 }) {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isStandalone, setIsStandalone] = useState(false);
@@ -142,17 +143,7 @@ export default function Navbar({
             whileTap={{ scale: 0.97 }}
             className="group flex min-h-[44px] items-center gap-3 text-left"
           >
-            <motion.div
-              whileHover={
-                isClassic
-                  ? { rotate: [-6, 6, -3, 0], scale: 1.08 }
-                  : { scale: 1.05 }
-              }
-              transition={{ duration: 0.35 }}
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-sm shadow-emerald-600/25 dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:shadow-[0_0_20px_-4px_rgba(204,255,0,0.45)] classic:border-2 classic:border-[#FBF5E8] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[2px_2px_0_#D9A441]"
-            >
-              <Trophy className="h-5 w-5 stroke-[2.3]" />
-            </motion.div>
+            <BrandLogo size="sm" animateKey={logoTriggerKey} />
             <div className="leading-tight">
               <span className="block text-base font-extrabold tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#EE8561] classic:group-hover:text-[#F4A261]">
                 AppTorneos

@@ -2,21 +2,24 @@ import { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertCircle,
+  ArrowLeft,
   CheckCircle2,
   Eye,
   EyeOff,
   Loader2,
   Lock,
   Mail,
+  MailCheck,
   Moon,
   Palette,
+  RefreshCw,
   Sparkles,
   Sun,
-  Trophy,
   User,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getFormatMeta } from '../utils/tournamentFormats';
+import BrandLogo from './BrandLogo';
 
 function translateAuthError(message = '') {
   const normalized = message.toLowerCase();
@@ -24,7 +27,7 @@ function translateAuthError(message = '') {
     return 'Email o contraseña incorrectos.';
   }
   if (normalized.includes('email not confirmed')) {
-    return 'Debes confirmar tu correo electrónico antes de iniciar sesión.';
+    return 'Debes confirmar tu correo electrónico antes de iniciar sesión. Revisa tu bandeja de entrada o spam.';
   }
   if (normalized.includes('user already registered')) {
     return 'Ya existe una cuenta registrada con ese email.';
@@ -49,6 +52,8 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [inviteInfo, setInviteInfo] = useState(null);
@@ -83,6 +88,31 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
     setError('');
     setSuccessMessage('');
     setConfirmPassword('');
+    setPendingConfirmEmail('');
+  }
+
+  async function handleResendConfirmation() {
+    if (!pendingConfirmEmail || resendingEmail || !supabase) return;
+    setResendingEmail(true);
+    setError('');
+    setSuccessMessage('');
+
+    try {
+      const { error: resendErr } = await supabase.auth.resend({
+        type: 'signup',
+        email: pendingConfirmEmail,
+        options: {
+          emailRedirectTo:
+            typeof window !== 'undefined' ? window.location.origin : undefined,
+        },
+      });
+      if (resendErr) throw resendErr;
+      setSuccessMessage('Te reenviamos el correo de confirmación. Revisá también Spam o Promociones.');
+    } catch (err) {
+      setError(translateAuthError(err?.message));
+    } finally {
+      setResendingEmail(false);
+    }
   }
 
   async function handleSubmit(e) {
@@ -111,12 +141,16 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
     try {
       if (isRegister) {
         const cleanName = displayName.trim();
+        const redirectUrl =
+          typeof window !== 'undefined' ? window.location.origin : undefined;
+
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
-          options: cleanName
-            ? { data: { display_name: cleanName } }
-            : undefined,
+          options: {
+            emailRedirectTo: redirectUrl,
+            ...(cleanName ? { data: { display_name: cleanName } } : {}),
+          },
         });
 
         if (signUpError) {
@@ -133,10 +167,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
         }
 
         if (data?.user && !data?.session) {
-          setSuccessMessage(
-            '¡Cuenta creada! Revisa tu bandeja de entrada para confirmar tu correo antes de iniciar sesión.'
-          );
-          setMode('login');
+          setPendingConfirmEmail(cleanEmail);
           setPassword('');
           setConfirmPassword('');
         }
@@ -147,6 +178,13 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
         });
 
         if (signInError) {
+          if (
+            String(signInError.message || '')
+              .toLowerCase()
+              .includes('email not confirmed')
+          ) {
+            setPendingConfirmEmail(cleanEmail);
+          }
           throw signInError;
         }
       }
@@ -227,12 +265,10 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
         <div className="mb-7 text-center">
           <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
             <div className="absolute inset-0 rounded-2xl bg-emerald-500/25 blur-xl dark:bg-[#CCFF00]/20 classic:hidden" />
-            <motion.div
-              whileHover={isClassic ? { rotate: [-6, 6, 0], scale: 1.06 } : { scale: 1.04 }}
-              className="relative flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-600/25 dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:shadow-[0_0_28px_-4px_rgba(204,255,0,0.45)] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[4px_4px_0_#1E4638]"
-            >
-              <Trophy className="h-7 w-7 stroke-[2.3]" />
-            </motion.div>
+            <BrandLogo
+              size="xl"
+              animateKey={`${mode}-${Boolean(pendingConfirmEmail)}`}
+            />
           </div>
           <p className="mb-1 text-[11px] font-bold tracking-wider text-emerald-600 uppercase dark:text-[#CCFF00] classic:text-[#D46F4D]">
             {isClassic ? 'Club Social & Deportivo' : 'Sport-Tech Arena'}
@@ -281,222 +317,294 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
             <div className="classic-heritage-stripe -mx-6 -mt-6 mb-6 h-1.5 sm:-mx-7 sm:-mt-7" />
           )}
 
-          <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200/80 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
-            <button
-              type="button"
-              onClick={() => handleSwitchMode('login')}
-              className={`relative min-h-[42px] rounded-lg py-2 text-xs font-extrabold tracking-wider uppercase transition-colors ${
-                !isRegister
-                  ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]'
-              }`}
+          {pendingConfirmEmail ? (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="space-y-4 text-center"
             >
-              {!isRegister && (
-                <motion.div
-                  layoutId="auth-mode-pill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
-                />
-              )}
-              <span className="relative z-10">Iniciar sesión</span>
-            </button>
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-600 dark:bg-[#CCFF00]/15 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#D9A441]/30 classic:text-[#1E4638]">
+                <MailCheck className="h-7 w-7" />
+              </div>
 
-            <button
-              type="button"
-              onClick={() => handleSwitchMode('register')}
-              className={`relative min-h-[42px] rounded-lg py-2 text-xs font-extrabold tracking-wider uppercase transition-colors ${
-                isRegister
-                  ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
-                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]'
-              }`}
-            >
-              {isRegister && (
-                <motion.div
-                  layoutId="auth-mode-pill"
-                  transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                  className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
-                />
-              )}
-              <span className="relative z-10">Crear cuenta</span>
-            </button>
-          </div>
+              <div>
+                <h2 className="text-lg font-black tracking-tight text-slate-900 uppercase dark:text-white classic:text-[#1E4638]">
+                  Confirmá tu correo electrónico
+                </h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-slate-600 dark:text-slate-300 classic:text-[#315E4E]">
+                  Enviamos un enlace de activación a{' '}
+                  <strong className="text-slate-900 dark:text-white classic:text-[#1E4638]">
+                    {pendingConfirmEmail}
+                  </strong>
+                  . Toca el enlace del correo para activar tu cuenta y poder iniciar sesión.
+                </p>
+              </div>
 
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: -6, height: 0 }}
-                transition={{ duration: 0.18 }}
-                className="mb-4 overflow-hidden"
-              >
-                <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200 classic:border-2 classic:border-[#D46F4D] classic:bg-[#D46F4D]/15 classic:text-[#9E3F22]">
+              {error && (
+                <div className="flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 p-3 text-left text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200">
                   <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{error}</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
 
-          <AnimatePresence>
-            {successMessage && (
-              <motion.div
-                initial={{ opacity: 0, y: -6, height: 0 }}
-                animate={{ opacity: 1, y: 0, height: 'auto' }}
-                exit={{ opacity: 0, y: -6, height: 0 }}
-                transition={{ duration: 0.18 }}
-                className="mb-4 overflow-hidden"
-              >
-                <div className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 dark:border-[#CCFF00]/35 dark:bg-[#CCFF00]/10 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#1E4638]/10 classic:text-[#1E4638]">
+              {successMessage && (
+                <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-left text-xs font-semibold text-emerald-800 dark:border-[#CCFF00]/35 dark:bg-[#CCFF00]/10 dark:text-[#CCFF00]">
                   <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{successMessage}</span>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+              )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <AnimatePresence initial={false}>
-              {isRegister && (
-                <motion.div
-                  key="display-name-field"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="overflow-hidden"
+              <div className="space-y-2 pt-2">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.97 }}
+                  disabled={resendingEmail}
+                  onClick={handleResendConfirmation}
+                  className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-extrabold tracking-wider text-slate-700 uppercase transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-200 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC] classic:text-[#1E4638]"
                 >
+                  <RefreshCw
+                    className={`h-3.5 w-3.5 ${resendingEmail ? 'animate-spin' : ''}`}
+                  />
+                  <span>
+                    {resendingEmail ? 'Reenviando...' : 'Reenviar correo de confirmación'}
+                  </span>
+                </motion.button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPendingConfirmEmail('');
+                    setMode('login');
+                    setError('');
+                    setSuccessMessage('');
+                  }}
+                  className="inline-flex min-h-[42px] w-full items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-bold text-emerald-700 hover:underline dark:text-[#CCFF00] classic:text-[#D46F4D]"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  <span>Ya confirmé mi correo · Ir a Iniciar sesión</span>
+                </button>
+              </div>
+            </motion.div>
+          ) : (
+            <>
+              <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200/80 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchMode('login')}
+                  className={`relative min-h-[42px] rounded-lg py-2 text-xs font-extrabold tracking-wider uppercase transition-colors ${
+                    !isRegister
+                      ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]'
+                  }`}
+                >
+                  {!isRegister && (
+                    <motion.div
+                      layoutId="auth-mode-pill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
+                    />
+                  )}
+                  <span className="relative z-10">Iniciar sesión</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSwitchMode('register')}
+                  className={`relative min-h-[42px] rounded-lg py-2 text-xs font-extrabold tracking-wider uppercase transition-colors ${
+                    isRegister
+                      ? 'text-slate-900 dark:text-[#0B0E14] classic:text-[#FBF5E8]'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]'
+                  }`}
+                >
+                  {isRegister && (
+                    <motion.div
+                      layoutId="auth-mode-pill"
+                      transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+                      className="absolute inset-0 rounded-lg bg-white shadow-xs dark:bg-[#CCFF00] classic:bg-[#1E4638]"
+                    />
+                  )}
+                  <span className="relative z-10">Crear cuenta</span>
+                </button>
+              </div>
+
+              <AnimatePresence>
+                {error && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -6, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="mb-4 overflow-hidden"
+                  >
+                    <div className="flex items-start gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:border-rose-500/35 dark:bg-rose-500/15 dark:text-rose-200 classic:border-2 classic:border-[#D46F4D] classic:bg-[#D46F4D]/15 classic:text-[#9E3F22]">
+                      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {successMessage && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -6, height: 0 }}
+                    animate={{ opacity: 1, y: 0, height: 'auto' }}
+                    exit={{ opacity: 0, y: -6, height: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="mb-4 overflow-hidden"
+                  >
+                    <div className="flex items-start gap-2.5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-xs font-semibold text-emerald-800 dark:border-[#CCFF00]/35 dark:bg-[#CCFF00]/10 dark:text-[#CCFF00] classic:border-2 classic:border-[#1E4638] classic:bg-[#1E4638]/10 classic:text-[#1E4638]">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span>{successMessage}</span>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <AnimatePresence initial={false}>
+                  {isRegister && (
+                    <motion.div
+                      key="display-name-field"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <label
+                        htmlFor="auth-display-name"
+                        className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
+                      >
+                        Tu nombre o apodo (opcional)
+                      </label>
+                      <div className="relative">
+                        <User className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
+                        <input
+                          id="auth-display-name"
+                          type="text"
+                          maxLength={50}
+                          value={displayName}
+                          onChange={(e) => setDisplayName(e.target.value)}
+                          placeholder="Ej: Santi"
+                          className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-3.5 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div>
                   <label
-                    htmlFor="auth-display-name"
+                    htmlFor="auth-email"
                     className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
                   >
-                    Tu nombre o apodo (opcional)
+                    Correo electrónico
                   </label>
                   <div className="relative">
-                    <User className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
+                    <Mail className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
                     <input
-                      id="auth-display-name"
-                      type="text"
-                      maxLength={50}
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Ej: Santi"
+                      id="auth-email"
+                      type="email"
+                      autoComplete="email"
+                      required
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="tu@email.com"
                       className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-3.5 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
                     />
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
 
-            <div>
-              <label
-                htmlFor="auth-email"
-                className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
-              >
-                Correo electrónico
-              </label>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
-                <input
-                  id="auth-email"
-                  type="email"
-                  autoComplete="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="tu@email.com"
-                  className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-3.5 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label
-                htmlFor="auth-password"
-                className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
-              >
-                Contraseña
-              </label>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
-                <input
-                  id="auth-password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete={isRegister ? 'new-password' : 'current-password'}
-                  required
-                  minLength={6}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 6 caracteres"
-                  className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-12 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute top-1/2 right-1 inline-flex min-h-[42px] min-w-[42px] -translate-y-1/2 items-center justify-center text-slate-400 transition hover:text-slate-700 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]"
-                  aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4" />
-                  ) : (
-                    <Eye className="h-4 w-4" />
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <AnimatePresence initial={false}>
-              {isRegister && (
-                <motion.div
-                  key="confirm-password-field"
-                  initial={{ opacity: 0, height: 0 }}
-                  animate={{ opacity: 1, height: 'auto' }}
-                  exit={{ opacity: 0, height: 0 }}
-                  transition={{ duration: 0.2, ease: 'easeOut' }}
-                  className="overflow-hidden"
-                >
+                <div>
                   <label
-                    htmlFor="auth-confirm-password"
+                    htmlFor="auth-password"
                     className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
                   >
-                    Confirmar contraseña
+                    Contraseña
                   </label>
                   <div className="relative">
                     <Lock className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
                     <input
-                      id="auth-confirm-password"
+                      id="auth-password"
                       type={showPassword ? 'text' : 'password'}
-                      autoComplete="new-password"
+                      autoComplete={isRegister ? 'new-password' : 'current-password'}
                       required
                       minLength={6}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      placeholder="Repite tu contraseña"
-                      className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-3.5 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Mínimo 6 caracteres"
+                      className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-12 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute top-1/2 right-1 inline-flex min-h-[42px] min-w-[42px] -translate-y-1/2 items-center justify-center text-slate-400 transition hover:text-slate-700 dark:hover:text-white classic:text-[#4C6B5E] classic:hover:text-[#1E4638]"
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Ver contraseña'}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4" />
+                      ) : (
+                        <Eye className="h-4 w-4" />
+                      )}
+                    </button>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                </div>
 
-            <motion.button
-              type="submit"
-              whileTap={{ scale: 0.97 }}
-              disabled={loading}
-              className="mt-2 inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-sm font-extrabold tracking-wide text-white uppercase shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:shadow-[0_0_24px_-6px_rgba(204,255,0,0.45)] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#1E4638] classic:hover:bg-[#df7b59]"
-            >
-              {loading && <Loader2 className="h-4 w-4 animate-spin" />}
-              <span>
-                {loading
-                  ? isRegister
-                    ? 'Creando cuenta...'
-                    : 'Ingresando...'
-                  : isRegister
-                  ? 'Registrarme'
-                  : 'Iniciar sesión'}
-              </span>
-            </motion.button>
-          </form>
+                <AnimatePresence initial={false}>
+                  {isRegister && (
+                    <motion.div
+                      key="confirm-password-field"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.2, ease: 'easeOut' }}
+                      className="overflow-hidden"
+                    >
+                      <label
+                        htmlFor="auth-confirm-password"
+                        className="mb-1.5 block text-[11px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#315E4E]"
+                      >
+                        Confirmar contraseña
+                      </label>
+                      <div className="relative">
+                        <Lock className="pointer-events-none absolute top-1/2 left-3.5 h-4 w-4 -translate-y-1/2 text-slate-400 classic:text-[#4C6B5E]" />
+                        <input
+                          id="auth-confirm-password"
+                          type={showPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Repite tu contraseña"
+                          className="w-full rounded-xl border border-slate-200/90 bg-slate-50/70 py-2.5 pr-3.5 pl-10 text-base text-slate-900 placeholder:text-slate-400 focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:outline-none sm:text-sm dark:border-white/[0.08] dark:bg-[#0B0E14] dark:text-white dark:focus:border-[#CCFF00] dark:focus:ring-[#CCFF00]/20 classic:border-2 classic:border-[#1E4638]/40 classic:bg-[#FFFBF4] classic:text-[#1E4638] classic:focus:border-[#1E4638]"
+                        />
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <motion.button
+                  type="submit"
+                  whileTap={{ scale: 0.97 }}
+                  disabled={loading}
+                  className="mt-2 inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-sm font-extrabold tracking-wide text-white uppercase shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:shadow-[0_0_24px_-6px_rgba(204,255,0,0.45)] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#1E4638] classic:hover:bg-[#df7b59]"
+                >
+                  {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+                  <span>
+                    {loading
+                      ? isRegister
+                        ? 'Creando cuenta...'
+                        : 'Ingresando...'
+                      : isRegister
+                      ? 'Registrarme y confirmar email'
+                      : 'Iniciar sesión'}
+                  </span>
+                </motion.button>
+              </form>
+            </>
+          )}
         </div>
       </motion.div>
     </div>

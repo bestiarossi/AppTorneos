@@ -80,7 +80,7 @@ export default function App() {
     if (metaTheme) {
       metaTheme.setAttribute(
         'content',
-        theme === 'dark' ? '#0B0E14' : theme === 'classic' ? '#F5EFE4' : '#F4F6FA'
+        theme === 'dark' ? '#0B0E14' : theme === 'classic' ? '#163228' : '#F4F6FA'
       );
     }
   }, [isDark, theme]);
@@ -206,23 +206,23 @@ export default function App() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] px-4 text-[var(--app-text)]">
         <div className="glass-card w-full max-w-lg rounded-2xl p-6">
-          <div className="mb-3 flex items-center gap-2.5 text-amber-600 dark:text-amber-400">
+          <div className="mb-3 flex items-center gap-2.5 text-amber-600 dark:text-amber-400 classic:text-[#C86849]">
             <AlertTriangle className="h-5 w-5" />
             <h1 className="text-lg font-extrabold tracking-tight uppercase">
               Configuración de Supabase faltante
             </h1>
           </div>
-          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300 classic:text-[#2D4D40]">
             Crea un archivo{' '}
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00]">
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00] classic:bg-[#EFE2CC] classic:text-[#163228]">
               .env
             </code>{' '}
             en la raíz del proyecto definiendo{' '}
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00]">
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00] classic:bg-[#EFE2CC] classic:text-[#163228]">
               VITE_SUPABASE_URL
             </code>{' '}
             y{' '}
-            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00]">
+            <code className="rounded bg-slate-100 px-1.5 py-0.5 font-mono text-xs dark:bg-white/10 dark:text-[#CCFF00] classic:bg-[#EFE2CC] classic:text-[#163228]">
               VITE_SUPABASE_ANON_KEY
             </code>
             , y luego reinicia el servidor de desarrollo.
@@ -240,9 +240,9 @@ export default function App() {
           animate={{ opacity: 1, scale: 1 }}
           className="glass-card flex items-center gap-3.5 rounded-2xl px-6 py-4"
         >
-          <Loader2 className="h-5 w-5 animate-spin text-emerald-600 dark:text-[#CCFF00] classic:text-[#C86D51]" />
+          <Loader2 className="h-5 w-5 animate-spin text-emerald-600 dark:text-[#CCFF00] classic:text-[#C86849]" />
           <div className="flex flex-col">
-            <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400">
+            <span className="text-[10px] font-bold tracking-wider text-slate-500 uppercase dark:text-slate-400 classic:text-[#4C6358]">
               Cargando sesión
             </span>
             <span className="text-sm font-extrabold tracking-tight uppercase">
@@ -257,39 +257,49 @@ export default function App() {
   return (
     <MotionConfig reducedMotion="user">
       <ToastProvider>
-        <div className="relative min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] antialiased transition-colors duration-300 selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:bg-[#CCFF00]/25 dark:selection:text-[#CCFF00] classic:selection:bg-[#C86D51]/25 classic:selection:text-[#1B4332]">
+        <div className="relative min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] antialiased transition-colors duration-300 selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:bg-[#CCFF00]/25 dark:selection:text-[#CCFF00] classic:selection:bg-[#C86849]/25 classic:selection:text-[#163228]">
           {/* Fondo ambiental adaptable a Claro / Oscuro / Clásico */}
           <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
             <div className="arena-grid-overlay absolute inset-0" />
 
             {isClassic ? (
               <>
-                {/* Modo Clásico: formas orgánicas animadas suaves (Terracota, Bosque y Ocre) */}
+                {/* Modo Clásico: Aros geométricos animados de cancha + manchas suaves de póster deportivo */}
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 90, repeat: Infinity, ease: 'linear' }}
+                  className="absolute -top-40 -right-40 h-[520px] w-[520px] rounded-full border-[2px] border-dashed border-[#163228]/15"
+                />
+                <motion.div
+                  animate={{ rotate: -360 }}
+                  transition={{ duration: 110, repeat: Infinity, ease: 'linear' }}
+                  className="absolute -bottom-48 -left-40 h-[560px] w-[560px] rounded-full border-[2px] border-[#C86849]/18"
+                />
                 <motion.div
                   animate={{
-                    x: [0, 28, -16, 0],
+                    x: [0, 26, -14, 0],
                     y: [0, -18, 12, 0],
-                    scale: [1, 1.07, 0.96, 1],
+                    scale: [1, 1.08, 0.96, 1],
                   }}
                   transition={{ duration: 16, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute -top-32 left-[-8%] h-[420px] w-[520px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(200,109,81,0.18)_0%,rgba(200,109,81,0.04)_55%,transparent_75%)] blur-3xl"
+                  className="absolute top-[8%] left-[-6%] h-[360px] w-[460px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(200,104,73,0.22)_0%,rgba(200,104,73,0.04)_55%,transparent_75%)] blur-3xl"
                 />
                 <motion.div
                   animate={{
-                    x: [0, -24, 18, 0],
-                    y: [0, 20, -14, 0],
-                    scale: [1, 0.95, 1.06, 1],
+                    x: [0, -24, 16, 0],
+                    y: [0, 22, -12, 0],
+                    scale: [1, 0.95, 1.07, 1],
                   }}
                   transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute top-[18%] right-[-10%] h-[460px] w-[540px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(27,67,50,0.14)_0%,rgba(27,67,50,0.03)_55%,transparent_75%)] blur-3xl"
+                  className="absolute right-[-8%] bottom-[5%] h-[420px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(22,50,40,0.18)_0%,rgba(22,50,40,0.03)_55%,transparent_75%)] blur-3xl"
                 />
                 <motion.div
                   animate={{
-                    x: [0, 20, -20, 0],
+                    x: [0, 18, -18, 0],
                     y: [0, -14, 10, 0],
                   }}
                   transition={{ duration: 18, repeat: Infinity, ease: 'easeInOut' }}
-                  className="absolute bottom-[-18%] left-[25%] h-[360px] w-[520px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(212,160,62,0.16)_0%,rgba(212,160,62,0.03)_55%,transparent_75%)] blur-3xl"
+                  className="absolute top-[42%] left-[32%] h-[320px] w-[460px] rounded-full bg-[radial-gradient(ellipse_at_center,rgba(217,164,65,0.2)_0%,rgba(217,164,65,0.03)_55%,transparent_75%)] blur-3xl"
                 />
               </>
             ) : isDark ? (
@@ -332,7 +342,7 @@ export default function App() {
               />
             ) : (
               <>
-                <Navbar
+              <Navbar
                   user={session.user}
                   profile={profile}
                   onOpenProfile={() => setIsProfileModalOpen(true)}
@@ -341,6 +351,7 @@ export default function App() {
                   onGoHome={() => setSelectedTournamentId(null)}
                   theme={theme}
                   onToggleTheme={toggleTheme}
+                  logoTriggerKey={selectedTournamentId || 'home'}
                 />
 
                 <main className="flex-1">
