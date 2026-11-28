@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 
 const SIZE_MAP = {
@@ -9,20 +10,29 @@ const SIZE_MAP = {
 
 const THEME_BURST_VARIANTS = {
   light: {
-    scale: [1, 1.12, 0.97, 1],
-    y: [0, -6, 1, 0],
-    rotate: [0, -6, 4, 0],
+    initial: { scale: 0.82, y: 8, rotate: -6 },
+    animate: {
+      scale: [0.82, 1.12, 0.97, 1],
+      y: [8, -6, 1, 0],
+      rotate: [-6, 4, -1, 0],
+    },
     transition: { duration: 0.62, ease: [0.22, 1, 0.36, 1] },
   },
   dark: {
-    scale: [1, 1.2, 0.92, 1.04, 1],
-    rotate: [0, 16, -10, 4, 0],
+    initial: { scale: 0.72, rotate: 18 },
+    animate: {
+      scale: [0.72, 1.22, 0.92, 1.04, 1],
+      rotate: [18, -12, 4, 0],
+    },
     transition: { duration: 0.56, ease: [0.16, 1, 0.3, 1] },
   },
   classic: {
-    scale: [1, 1.18, 0.9, 1.06, 1],
-    y: [0, -8, 3, -1, 0],
-    rotate: [0, -10, 8, -4, 0],
+    initial: { scale: 1.24, y: -12, rotate: -12 },
+    animate: {
+      scale: [1.24, 0.88, 1.07, 0.98, 1],
+      y: [-12, 4, -2, 0],
+      rotate: [-12, 9, -5, 2, 0],
+    },
     transition: { duration: 0.65, ease: 'easeOut' },
   },
 };
@@ -48,33 +58,55 @@ export default function BrandLogo({
   const themeBurst =
     THEME_BURST_VARIANTS[activeTheme] || THEME_BURST_VARIANTS.light;
 
-  const isLoop = mode === 'auth-loop';
+  // Detecta cambio de tema incluso estando en AuthScreen (mode="auth-loop")
+  // para disparar la coreografía propia del tema durante 650ms y luego volver a respirar
+  const [themeSwitching, setThemeSwitching] = useState(false);
+  const prevThemeRef = useRef(activeTheme);
+
+  useEffect(() => {
+    if (prevThemeRef.current !== activeTheme) {
+      prevThemeRef.current = activeTheme;
+      setThemeSwitching(true);
+      const timer = setTimeout(() => {
+        setThemeSwitching(false);
+      }, 660);
+      return () => clearTimeout(timer);
+    }
+  }, [activeTheme]);
+
   const isSuccess = mode === 'auth-success';
+  const isLoop = mode === 'auth-loop' && !themeSwitching && !isSuccess;
+  const isBurst = !isLoop && !isSuccess;
+
+  const loopDuration = isLoading ? 0.55 : 1.45;
+
+  const containerInitial = isSuccess
+    ? { scale: 0.95, rotate: 0, y: 0 }
+    : isLoop
+    ? { scale: 0.97, y: 2.5, rotate: -1.8 }
+    : themeBurst.initial;
 
   const containerAnimate = isSuccess
     ? {
-        scale: [1, 1.32, 0.95, 1.08, 1],
+        scale: [0.95, 1.32, 0.95, 1.08, 1],
         rotate: [0, -14, 360],
         y: [0, -10, 2, 0],
       }
     : isLoop
     ? {
-        scale: isLoading ? [1, 1.09, 1] : [1, 1.055, 1],
-        y: isLoading ? [0, -5, 0] : [0, -3.5, 0],
-        rotate: isLoading ? [0, 4, -4, 0] : [0, 2, -2, 0],
+        scale: isLoading ? 1.09 : 1.055,
+        y: isLoading ? -4.5 : -3.5,
+        rotate: isLoading ? 3.5 : 1.8,
       }
-    : {
-        scale: themeBurst.scale,
-        y: themeBurst.y || 0,
-        rotate: themeBurst.rotate,
-      };
+    : themeBurst.animate;
 
   const containerTransition = isSuccess
     ? { duration: 0.66, ease: [0.22, 1, 0.36, 1] }
     : isLoop
     ? {
-        duration: isLoading ? 0.85 : 2.6,
+        duration: loopDuration,
         repeat: Infinity,
+        repeatType: 'mirror',
         ease: 'easeInOut',
       }
     : themeBurst.transition;
@@ -82,54 +114,55 @@ export default function BrandLogo({
   return (
     <motion.div
       key={
-        isLoop || isSuccess
-          ? 'brand-logo-persistent-auth'
-          : `brand-logo-burst-${activeTheme}-${animateKey}`
+        isBurst
+          ? `brand-logo-burst-${activeTheme}-${animateKey}`
+          : `brand-logo-auth-${isSuccess ? 'ok' : isLoading ? 'load' : 'idle'}`
       }
-      initial={false}
+      initial={containerInitial}
       animate={containerAnimate}
       transition={containerTransition}
-      whileHover={{ scale: 1.07, rotate: -4 }}
+      whileHover={{ scale: 1.08, rotate: -4 }}
       className={`relative inline-flex shrink-0 items-center justify-center overflow-visible select-none ${dim.box} bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-700 text-white shadow-md shadow-emerald-600/30 dark:from-[#CCFF00] dark:via-[#b8e600] dark:to-lime-500 dark:text-[#0B0E14] dark:shadow-[0_0_28px_-4px_rgba(204,255,0,0.55)] classic:border-2 classic:border-[#FBF5E8] classic:from-[#D46F4D] classic:via-[#C8603E] classic:to-[#A94B2D] classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#D9A441] ${className}`}
     >
-      {/* Halo exterior que respira suavemente en loop sin desaparecer nunca */}
+      {/* Halo exterior que respira solo en loop (arranca solo en celular y PC con repeatType: 'mirror') */}
       {isLoop && (
         <motion.span
-          initial={false}
+          initial={{ scale: 0.98, opacity: 0.25 }}
           animate={{
-            scale: isLoading ? [1, 1.18, 1] : [1, 1.12, 1],
-            opacity: isLoading ? [0.35, 0.75, 0.35] : [0.25, 0.55, 0.25],
+            scale: isLoading ? 1.18 : 1.13,
+            opacity: isLoading ? 0.78 : 0.58,
           }}
           transition={{
-            duration: isLoading ? 0.85 : 2.6,
+            duration: loopDuration,
             repeat: Infinity,
+            repeatType: 'mirror',
             ease: 'easeInOut',
           }}
-          className="pointer-events-none absolute -inset-1.5 rounded-[inherit] border-2 border-emerald-400/70 dark:border-[#CCFF00]/70 classic:border-[#D9A441]/80"
+          className="pointer-events-none absolute -inset-1.5 rounded-[inherit] border-2 border-emerald-400/75 dark:border-[#CCFF00]/75 classic:border-[#D9A441]/85"
         />
       )}
 
-      {/* Onda expansiva única solo al concretar éxito o cambiar de vista en Navbar */}
-      {!isLoop && (
+      {/* Onda expansiva al cambiar de tema, entrar/salir de un torneo o concretar login */}
+      {(isBurst || isSuccess) && (
         <motion.span
-          key={`burst-ring-${mode}-${activeTheme}-${animateKey}`}
-          initial={{ opacity: 0.8, scale: 0.9 }}
-          animate={{ opacity: 0, scale: isSuccess ? 1.95 : 1.6 }}
+          key={`burst-ring-${activeTheme}-${animateKey}-${isSuccess}`}
+          initial={{ opacity: 0.85, scale: 0.88 }}
+          animate={{ opacity: 0, scale: isSuccess ? 1.95 : 1.65 }}
           transition={{ duration: 0.62, ease: 'easeOut' }}
           className="pointer-events-none absolute inset-0 rounded-[inherit] border-2 border-emerald-400 dark:border-[#CCFF00] classic:border-[#D9A441]"
         />
       )}
 
-      {/* Partículas de celebración al concretar Login / Registro */}
-      {isSuccess &&
+      {/* Partículas de celebración en éxito o al cambiar a Modo Oscuro */}
+      {(isSuccess || (isBurst && activeTheme === 'dark')) &&
         SPARK_OFFSETS.map((pos, idx) => (
           <motion.span
-            key={`spark-${idx}`}
+            key={`spark-${idx}-${activeTheme}-${animateKey}-${isSuccess}`}
             initial={{ opacity: 1, x: 0, y: 0, scale: 0.5 }}
             animate={{
               opacity: [1, 1, 0],
-              x: pos.x * 1.15,
-              y: pos.y * 1.15,
+              x: isSuccess ? pos.x * 1.15 : pos.x * 0.75,
+              y: isSuccess ? pos.y * 1.15 : pos.y * 0.75,
               scale: [0.5, 1.35, 0],
             }}
             transition={{ duration: 0.6, delay: idx * 0.025, ease: 'easeOut' }}
@@ -153,19 +186,14 @@ export default function BrandLogo({
           strokeLinejoin="round"
           fill="currentColor"
           fillOpacity="0.14"
-          initial={isLoop ? { pathLength: 0.62 } : { pathLength: 0.25 }}
-          animate={
-            isLoop
-              ? {
-                  pathLength: isLoading ? [0.45, 1, 0.45] : [0.62, 1, 0.62],
-                }
-              : { pathLength: 1 }
-          }
+          initial={{ pathLength: isLoop ? 0.55 : 0.25 }}
+          animate={{ pathLength: 1 }}
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.6,
+                  duration: loopDuration,
                   repeat: Infinity,
+                  repeatType: 'mirror',
                   ease: 'easeInOut',
                 }
               : { duration: 0.55, ease: 'easeOut' }
@@ -179,18 +207,17 @@ export default function BrandLogo({
           strokeWidth="1.9"
           strokeLinecap="round"
           strokeLinejoin="round"
-          initial={false}
-          animate={
-            isLoop ? { opacity: [0.55, 0.95, 0.55] } : { opacity: 0.82 }
-          }
+          initial={{ opacity: isLoop ? 0.5 : 0.4 }}
+          animate={{ opacity: isLoop ? 0.95 : 0.85 }}
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.6,
+                  duration: loopDuration,
                   repeat: Infinity,
+                  repeatType: 'mirror',
                   ease: 'easeInOut',
                 }
-              : { duration: 0.4 }
+              : { duration: 0.45 }
           }
         />
 
@@ -198,10 +225,10 @@ export default function BrandLogo({
         <motion.path
           d="M14.5 11.5H25.5V16.8C25.5 19.8 23.1 22.2 20 22.2C16.9 22.2 14.5 19.8 14.5 16.8V11.5Z"
           fill="currentColor"
-          initial={false}
+          initial={{ y: isLoop ? 0.8 : 2, scale: isLoop ? 0.98 : 0.9 }}
           animate={
             isLoop
-              ? { y: [0, -1.5, 0], scale: [1, 1.05, 1] }
+              ? { y: -1.4, scale: 1.05 }
               : isSuccess
               ? { scale: [1, 1.24, 1], y: [0, -2.5, 0] }
               : { y: 0, scale: 1 }
@@ -209,8 +236,9 @@ export default function BrandLogo({
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.6,
+                  duration: loopDuration,
                   repeat: Infinity,
+                  repeatType: 'mirror',
                   ease: 'easeInOut',
                 }
               : { type: 'spring', stiffness: 420, damping: 18 }
@@ -230,24 +258,26 @@ export default function BrandLogo({
           d="M20 6.8L21.1 9.1L23.5 9.4L21.7 11L22.2 13.3L20 12.1L17.8 13.3L18.3 11L16.5 9.4L18.9 9.1L20 6.8Z"
           className="fill-amber-300 dark:fill-[#0B0E14] classic:fill-[#D9A441]"
           style={{ transformOrigin: '20px 10px' }}
-          initial={false}
+          initial={{
+            scale: isLoop ? 0.92 : 0.4,
+            rotate: isLoop ? -14 : -120,
+          }}
           animate={
             isLoop
               ? {
-                  scale: isLoading ? [0.95, 1.32, 0.95] : [1, 1.22, 1],
-                  rotate: isLoading ? [0, 180, 360] : [0, 14, -14, 0],
+                  scale: isLoading ? 1.32 : 1.22,
+                  rotate: isLoading ? 180 : 14,
                 }
               : isSuccess
               ? { scale: [0.8, 1.5, 1], rotate: [0, 360] }
-              : activeTheme === 'dark'
-              ? { scale: [0.4, 1.35, 1], rotate: [-180, 15, 0] }
-              : { scale: [0.5, 1.25, 1], rotate: 0 }
+              : { scale: 1, rotate: 0 }
           }
           transition={
             isLoop
               ? {
-                  duration: isLoading ? 0.85 : 2.6,
+                  duration: loopDuration,
                   repeat: Infinity,
+                  repeatType: 'mirror',
                   ease: 'easeInOut',
                 }
               : { duration: 0.55, ease: 'backOut' }

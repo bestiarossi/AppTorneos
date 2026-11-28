@@ -154,15 +154,26 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (!isMounted) return;
-      setSession(nextSession ?? null);
       if (nextSession?.user) {
         loadUserProfile(nextSession.user);
+        if (event === 'SIGNED_IN') {
+          setTimeout(() => {
+            if (isMounted) setSession(nextSession);
+          }, 680);
+        } else {
+          setSession(nextSession);
+        }
       } else {
+        setSession(null);
         setProfile(null);
         setSelectedTournamentId(null);
         setIsProfileModalOpen(false);
       }
+    });
     });
 
     return () => {
@@ -255,7 +266,7 @@ export default function App() {
   }
 
   return (
-    <MotionConfig reducedMotion="user">
+    <MotionConfig reducedMotion="never">
       <ToastProvider>
         <div className="relative min-h-screen bg-[var(--app-bg)] text-[var(--app-text)] antialiased transition-colors duration-300 selection:bg-emerald-500/20 selection:text-emerald-800 dark:selection:bg-[#CCFF00]/25 dark:selection:text-[#CCFF00] classic:selection:bg-[#C86849]/25 classic:selection:text-[#163228]">
           {/* Fondo ambiental adaptable a Claro / Oscuro / Clásico */}

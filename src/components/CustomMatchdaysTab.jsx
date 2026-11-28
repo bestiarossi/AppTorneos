@@ -38,6 +38,7 @@ export default function CustomMatchdaysTab({
   selectedSubtournamentId,
   onSelectSubtournament,
   onOpenPotManager,
+  onBroadcastLiveDraw,
   onRefreshCustomData,
 }) {
   const [expandedMatchdays, setExpandedMatchdays] = useState({});
@@ -107,6 +108,7 @@ export default function CustomMatchdaysTab({
         isAdmin={isAdmin}
         currentUserId={currentUserId}
         onOpenPotManager={onOpenPotManager}
+        onBroadcastLiveDraw={onBroadcastLiveDraw}
         onBack={() => onSelectSubtournament(null)}
         onRefreshData={onRefreshCustomData}
         onSubtournamentDeleted={async () => {
@@ -226,7 +228,6 @@ export default function CustomMatchdaysTab({
         </div>
       </div>
 
-      {/* Filtro rápido por categoría si existen subtorneos categorizados */}
       {distinctCategories.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5">
           <button
