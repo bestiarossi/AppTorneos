@@ -18,6 +18,10 @@ import {
   User,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import {
+  initGlobalUiSounds,
+  playScoreSound,
+} from '../utils/soundEffects';
 import { getFormatMeta } from '../utils/tournamentFormats';
 import BrandLogo from './BrandLogo';
 
@@ -52,6 +56,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [authSuccess, setAuthSuccess] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
   const [error, setError] = useState('');
@@ -61,6 +66,10 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
   const isRegister = mode === 'register';
   const isDark = theme === 'dark';
   const isClassic = theme === 'classic';
+
+  useEffect(() => {
+    initGlobalUiSounds();
+  }, []);
 
   useEffect(() => {
     if (!inviteCode || !supabase) {
@@ -89,6 +98,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
     setSuccessMessage('');
     setConfirmPassword('');
     setPendingConfirmEmail('');
+    setAuthSuccess(false);
   }
 
   async function handleResendConfirmation() {
@@ -107,6 +117,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
         },
       });
       if (resendErr) throw resendErr;
+      playScoreSound();
       setSuccessMessage('Te reenviamos el correo de confirmación. Revisá también Spam o Promociones.');
     } catch (err) {
       setError(translateAuthError(err?.message));
@@ -137,6 +148,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
     }
 
     setLoading(true);
+    setAuthSuccess(false);
 
     try {
       if (isRegister) {
@@ -166,10 +178,16 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
           return;
         }
 
+        // Dispara la animación de victoria en el logo antes de mostrar la tarjeta de confirmación
+        setAuthSuccess(true);
+        playScoreSound();
+
         if (data?.user && !data?.session) {
-          setPendingConfirmEmail(cleanEmail);
-          setPassword('');
-          setConfirmPassword('');
+          setTimeout(() => {
+            setPendingConfirmEmail(cleanEmail);
+            setPassword('');
+            setConfirmPassword('');
+          }, 520);
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -187,6 +205,9 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
           }
           throw signInError;
         }
+
+        setAuthSuccess(true);
+        playScoreSound();
       }
     } catch (err) {
       setError(translateAuthError(err?.message));
@@ -267,6 +288,9 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
             <div className="absolute inset-0 rounded-2xl bg-emerald-500/25 blur-xl dark:bg-[#CCFF00]/20 classic:hidden" />
             <BrandLogo
               size="xl"
+              theme={theme}
+              mode={authSuccess ? 'auth-success' : 'auth-loop'}
+              isLoading={loading}
               animateKey={`${mode}-${Boolean(pendingConfirmEmail)}`}
             />
           </div>
@@ -374,6 +398,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
                   type="button"
                   onClick={() => {
                     setPendingConfirmEmail('');
+                    setAuthSuccess(false);
                     setMode('login');
                     setError('');
                     setSuccessMessage('');

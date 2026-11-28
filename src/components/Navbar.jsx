@@ -143,7 +143,12 @@ export default function Navbar({
             whileTap={{ scale: 0.97 }}
             className="group flex min-h-[44px] items-center gap-3 text-left"
           >
-            <BrandLogo size="sm" animateKey={logoTriggerKey} />
+            <BrandLogo
+              size="sm"
+              theme={theme}
+              mode="burst"
+              animateKey={`${logoTriggerKey}-${theme}`}
+            />
             <div className="leading-tight">
               <span className="block text-base font-extrabold tracking-tight text-slate-900 uppercase transition-colors group-hover:text-emerald-600 dark:text-white dark:group-hover:text-[#CCFF00] classic:text-[#EE8561] classic:group-hover:text-[#F4A261]">
                 AppTorneos
