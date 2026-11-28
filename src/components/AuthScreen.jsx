@@ -187,7 +187,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
             setPendingConfirmEmail(cleanEmail);
             setPassword('');
             setConfirmPassword('');
-          }, 520);
+          }, 750);
         }
       } else {
         const { error: signInError } = await supabase.auth.signInWithPassword({
@@ -284,8 +284,8 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
         className="w-full max-w-md"
       >
         <div className="mb-7 text-center">
-          <div className="relative mx-auto mb-4 flex h-16 w-16 items-center justify-center">
-            <div className="absolute inset-0 rounded-2xl bg-emerald-500/25 blur-xl dark:bg-[#CCFF00]/20 classic:hidden" />
+          <div className="relative mx-auto mb-4 flex h-20 w-20 items-center justify-center">
+            <div className="absolute inset-0 rounded-3xl bg-emerald-500/25 blur-xl dark:bg-[#CCFF00]/20 classic:hidden" />
             <BrandLogo
               size="xl"
               theme={theme}
