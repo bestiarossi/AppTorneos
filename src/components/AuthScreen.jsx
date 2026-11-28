@@ -48,6 +48,29 @@ function translateAuthError(message = '') {
   return message || 'Ocurrió un error al autenticar. Intenta nuevamente.';
 }
 
+function GoogleIcon({ className = 'h-4 w-4' }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24">
+      <path
+        fill="#4285F4"
+        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.99 0 12s.45 3.82 1.25 5.42l4.03-3.15z"
+      />
+      <path
+        fill="#EA4335"
+        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
+      />
+    </svg>
+  );
+}
+
 export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode = null }) {
   const [mode, setMode] = useState('login');
   const [displayName, setDisplayName] = useState('');
@@ -56,6 +79,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [authSuccess, setAuthSuccess] = useState(false);
   const [resendingEmail, setResendingEmail] = useState(false);
   const [pendingConfirmEmail, setPendingConfirmEmail] = useState('');
@@ -99,6 +123,38 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
     setConfirmPassword('');
     setPendingConfirmEmail('');
     setAuthSuccess(false);
+  }
+
+  async function handleGoogleSignIn() {
+    if (!supabase || googleLoading) return;
+    setError('');
+    setSuccessMessage('');
+    setGoogleLoading(true);
+
+    try {
+      const redirectUrl =
+        typeof window !== 'undefined'
+          ? inviteCode
+            ? `${window.location.origin}/?invite=${inviteCode}`
+            : `${window.location.origin}/`
+          : undefined;
+
+      const { error: oAuthError } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'select_account',
+          },
+        },
+      });
+
+      if (oAuthError) throw oAuthError;
+    } catch (err) {
+      setError(translateAuthError(err?.message));
+      setGoogleLoading(false);
+    }
   }
 
   async function handleResendConfirmation() {
@@ -178,7 +234,6 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
           return;
         }
 
-        // Dispara la animación de victoria en el logo antes de mostrar la tarjeta de confirmación
         setAuthSuccess(true);
         playScoreSound();
 
@@ -290,7 +345,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
               size="xl"
               theme={theme}
               mode={authSuccess ? 'auth-success' : 'auth-loop'}
-              isLoading={loading}
+              isLoading={loading || googleLoading}
               animateKey={`${mode}-${Boolean(pendingConfirmEmail)}`}
             />
           </div>
@@ -412,6 +467,35 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
             </motion.div>
           ) : (
             <>
+              {/* Botón de Iniciar con Google */}
+              <div className="mb-4">
+                <motion.button
+                  type="button"
+                  whileTap={{ scale: 0.97 }}
+                  disabled={googleLoading || loading}
+                  onClick={handleGoogleSignIn}
+                  className="inline-flex min-h-[46px] w-full items-center justify-center gap-2.5 rounded-xl border border-slate-200/90 bg-white px-4 py-2.5 text-xs font-extrabold tracking-wider text-slate-800 uppercase shadow-sm transition hover:bg-slate-50 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-slate-100 dark:hover:bg-white/10 classic:border-2 classic:border-[#1E4638] classic:bg-[#FBF5E8] classic:text-[#1E4638] classic:shadow-[2px_2px_0_#1E4638]"
+                >
+                  {googleLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin text-emerald-600 dark:text-[#CCFF00]" />
+                  ) : (
+                    <GoogleIcon className="h-4 w-4" />
+                  )}
+                  <span>
+                    {googleLoading ? 'Conectando con Google...' : 'Continuar con Google'}
+                  </span>
+                </motion.button>
+
+                <div className="relative my-4 text-center">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-slate-200 dark:border-white/10 classic:border-[#1E4638]/20" />
+                  </div>
+                  <span className="relative bg-white px-3 text-[10px] font-extrabold uppercase text-slate-400 dark:bg-[#141923] dark:text-slate-500 classic:bg-[#FBF5E8] classic:text-[#315E4E]">
+                    o con tu email
+                  </span>
+                </div>
+              </div>
+
               <div className="mb-6 grid grid-cols-2 rounded-xl border border-slate-200/80 bg-slate-100/85 p-1 dark:border-white/[0.08] dark:bg-[#0B0E14] classic:border-2 classic:border-[#1E4638] classic:bg-[#EFE2CC]">
                 <button
                   type="button"
@@ -613,7 +697,7 @@ export default function AuthScreen({ theme = 'light', onToggleTheme, inviteCode 
                 <motion.button
                   type="submit"
                   whileTap={{ scale: 0.97 }}
-                  disabled={loading}
+                  disabled={loading || googleLoading}
                   className="mt-2 inline-flex min-h-[46px] w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-3 text-sm font-extrabold tracking-wide text-white uppercase shadow-md shadow-emerald-600/20 transition hover:from-emerald-500 hover:to-teal-500 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-[#CCFF00] dark:bg-none dark:text-[#0B0E14] dark:shadow-[0_0_24px_-6px_rgba(204,255,0,0.45)] dark:hover:bg-[#d9ff33] classic:border-2 classic:border-[#1E4638] classic:bg-[#D46F4D] classic:bg-none classic:text-[#FBF5E8] classic:shadow-[3px_3px_0_#1E4638] classic:hover:bg-[#df7b59]"
                 >
                   {loading && <Loader2 className="h-4 w-4 animate-spin" />}
